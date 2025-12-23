@@ -1,0 +1,49 @@
+{% extends "Shared/dashboard.html" %}
+{% load static %}
+
+{% block content %}
+
+<div class="container mt-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'orderDetailIndex' %}">Orders</a></li>
+            <li class="breadcrumb-item active" aria-current="page">View Order</li>
+        </ol>
+    </nav>
+
+    <!-- Page Header -->
+    <h2 class="mb-4">View Order</h2>
+
+    <!-- Order Details Card -->
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <strong>Order Details {{ order_id }} - Table {{ table_no }}</strong>
+        </div>
+
+        <div class="card-body">
+            {% if order_details %}
+                <div class="row font-weight-bold mb-2">
+                    <div class="col-md-3">Category</div>
+                    <div class="col-md-3">Item</div>
+                    <div class="col-md-2">Qty Type</div>
+                    <div class="col-md-2">Price (₹)</div>
+                </div>
+
+                {% for item in order_details %}
+                    <div class="row mb-1">
+                        <div class="col-md-3">{{ item.menu_category }}</div>
+                        <div class="col-md-3">{{ item.menu_name }}</div>
+                        <div class="col-md-2">{{ item.quantity_type }}</div>
+                        <div class="col-md-2">{{ item.price }}</div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No order details found.</p>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}

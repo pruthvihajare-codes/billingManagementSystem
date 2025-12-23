@@ -1,0 +1,338 @@
+{% extends "Shared/dashboard.html" %}
+{% load static %}
+{% load encryption_filters %}
+{% block content %}
+
+<style>
+.custom-radio-group {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+}
+.custom-radio input[type="radio"] {
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #007bff;
+    border-radius: 50%;
+    margin-right: 8px;
+    cursor: pointer;
+}
+.custom-radio input[type="radio"]:checked {
+    background-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0,123,255,.3);
+}
+.custom-radio {
+    display: flex;
+    align-items: center;
+    font-weight: 500;
+}
+</style>
+
+<div class="card shadow mb-4">
+    <div class="card-header py-3">
+
+        <h2 class="m-0 font-weight-bold text-primary">Edit Food Order</h2>
+
+        <!-- REQUIRED HIDDEN FIELDS -->
+        <input type="hidden" id="order-id" value="{{ selected_order.order_id|enc }}">
+        <input type="hidden" id="TableCategory" value="{{ Category }}">
+
+        <!-- TOP CONTROLS -->
+        <div class="row mt-4">
+            <div class="col-md-3">
+                <input type="text" id="service-dropdown"
+                       class="form-control"
+                       value="{{ tableName }}" readonly>
+            </div>
+
+            <div class="col-md-3">
+                <input list="dish-list" id="next-dropdown"
+                       class="form-control" placeholder="Add dish...">
+                <datalist id="dish-list">
+                    {% for dish in menu_items %}
+                        <option value="{{ dish }}"></option>
+                    {% endfor %}
+                </datalist>
+            </div>
+
+            <div class="col-md-3">
+                <div class="custom-radio-group">
+                    <label class="custom-radio">
+                        <input type="radio" name="quantity" value="H">
+                        Half
+                    </label>
+                    <label class="custom-radio">
+                        <input type="radio" name="quantity" value="F">
+                        Full
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <div class="row mt-4">
+
+            <!-- ORDER TABLE -->
+            <div class="col-md-8" id="order-summary-container">
+                <h5>Selected Orders</h5>
+                <table class="table table-bordered" id="order-summary">
+                    <thead>
+                        <tr>
+                            <th>Dish</th>
+                            <th>Category</th>
+                            <th>Quantity</th>
+                            <th>How Much</th>
+                            <th>Price</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+
+                        {% for item in order_details %}
+                            <tr data-unit-price="{{ item.price }}"
+                                data-order-detail-id="{{ item.id|enc }}">
+                                <td>{{ item.menu_name }}</td>
+                                <td>{{ item.menu_category }}</td>
+                                <td>{% if item.quantity_type == 'H' %}Half{% else %}Full{% endif %}</td>
+                                <td>
+                                    <input type="number"
+                                        class="form-control form-control-sm dynamic-qty"
+                                        min="1" value="{{ item.quantity }}">
+                                </td>
+                                <td class="price-cell">₹{{ item.price|floatformat:2 }}</td>
+                                <td>
+                                    <button type="button"
+                                            class="btn btn-danger btn-sm delete-row">
+                                        Delete
+                                    </button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- BILLING SUMMARY -->
+            <div class="col-md-4" id="billingSummaryCard">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-body">
+                        <h5 class="text-center mb-3">💰 Billing Summary</h5>
+
+                        <ul class="list-group list-group-flush mb-3">
+                            <li class="list-group-item d-flex justify-content-between">
+                                <strong>Total</strong>
+                                <span id="total-amount">₹{{ selected_order.total_amount }}</span>
+                            </li>
+
+                            <li class="list-group-item d-flex justify-content-between">
+                                <div>
+                                    <input type="checkbox" id="gst-checkbox"
+                                           {% if selected_order.gst_applied %}checked{% endif %}>
+                                    Apply GST (18%)
+                                </div>
+                                <span id="gst-amount">₹{{ selected_order.gst_amount }}</span>
+                            </li>
+
+                            <li class="list-group-item d-flex justify-content-between bg-light">
+                                <strong>Grand Total</strong>
+                                <strong id="grand-total">₹{{ selected_order.grand_total }}</strong>
+                            </li>
+                        </ul>
+
+                        <div class="text-center">
+                            <button class="btn btn-primary" id="save-order-btn">
+                                Update Order
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+<!-- JS -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+    $(document).ready(function () {
+        updateTotalAmount();
+    });
+
+    $('input[name="quantity"]').on('change', function () {
+
+        const dish = $('#next-dropdown').val();
+        const qtyType = $('input[name="quantity"]:checked').val();
+        const seatingCategory = $('#TableCategory').val();
+
+        if (!dish) {
+            alert("Select dish first");
+            return;
+        }
+
+        $.ajax({
+            url: "{% url 'get_menu_price' %}",
+            type: "GET",
+            data: {
+                menu_name: dish,
+                quantity_type: qtyType,
+                seating_category: seatingCategory
+            },
+            success: function (res) {
+
+                const qtyText = qtyType === 'H' ? 'Half' : 'Full';
+
+                $('#order-summary tbody').append(`
+                    <tr data-unit-price="${res.price}">
+                        <td>${dish}</td>
+                        <td>${res.menu_category}</td>
+                        <td>${qtyText}</td>
+                        <td>
+                            <input type="number"
+                                class="form-control form-control-sm dynamic-qty"
+                                value="1" min="1">
+                        </td>
+                        <td class="price-cell">₹${res.price.toFixed(2)}</td>
+                        <td>
+                            <button class="btn btn-danger btn-sm delete-row">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                `);
+
+                updateTotalAmount();
+            }
+        });
+
+        $('#next-dropdown').val('');
+        $('input[name="quantity"]').prop('checked', false);
+    });
+
+
+    /* QTY CHANGE */
+    $(document).on('input', '.dynamic-qty', updateTotalAmount);
+
+    /* GST TOGGLE */
+    $('#gst-checkbox').on('change', updateTotalAmount);
+
+    /* TOTAL CALC */
+    function updateTotalAmount() {
+        let total = 0;
+
+        $('#order-summary tbody tr').each(function () {
+            const price = parseFloat($(this).data('unit-price'));
+            const qty = parseInt($(this).find('.dynamic-qty').val()) || 1;
+            total += price * qty;
+        });
+
+        const gst = $('#gst-checkbox').is(':checked') ? total * 0.18 : 0;
+
+        $('#total-amount').text(`₹${total.toFixed(2)}`);
+        $('#gst-amount').text(`₹${gst.toFixed(2)}`);
+        $('#grand-total').text(`₹${(total + gst).toFixed(2)}`);
+    }
+
+    /* UPDATE ORDER */
+    $('#save-order-btn').on('click', function () {
+
+        const items = [];
+
+        $('#order-summary tbody tr').each(function () {
+            items.push({
+                menu_name: $(this).find('td:eq(0)').text(),
+                menu_category: $(this).find('td:eq(1)').text(),
+                quantity_type: $(this).find('td:eq(2)').text() === 'Half' ? 'H' : 'F',
+                quantity: $(this).find('.dynamic-qty').val(),
+                price: $(this).data('unit-price')
+            });
+        });
+
+        $.ajax({
+            url: "{% url 'orderUpdateDetails' %}",
+            type: "POST",
+            data: {
+                order_id: $('#order-id').val(),
+                order_items: JSON.stringify(items),
+                total_amount: $('#total-amount').text().replace('₹',''),
+                gst_applied: $('#gst-checkbox').is(':checked') ? 1 : 0,
+                gst_amount: $('#gst-amount').text().replace('₹',''),
+                grand_total: $('#grand-total').text().replace('₹',''),
+                csrfmiddlewaretoken: '{{ csrf_token }}'
+            },
+            success: function () {
+                alert("Order updated successfully");
+                window.location.href = "{% url 'orderDetailIndex' %}";
+            }
+        });
+    });
+
+    $(document).on('click', '.delete-row', function () {
+
+        const row = $(this).closest('tr');
+        const orderDetailIdEnc = row.data('order-detail-id'); // may be undefined
+
+        Swal.fire({
+            title: 'Are you sure?',
+            text: "This item will be removed from the order",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it'
+        }).then((result) => {
+
+            if (!result.isConfirmed) return;
+
+            // 🟢 CASE 1: Item NOT saved yet → remove from UI only
+            if (!orderDetailIdEnc) {
+                row.remove();
+                updateTotalAmount();
+
+                Swal.fire(
+                    'Removed',
+                    'Item removed from list.',
+                    'success'
+                );
+                return;
+            }
+
+            // 🔴 CASE 2: Item exists in DB → delete from DB
+            $.ajax({
+                url: "{% url 'delete_order_item' %}",
+                type: "POST",
+                data: {
+                    order_detail_id: orderDetailIdEnc,
+                    csrfmiddlewaretoken: '{{ csrf_token }}'
+                },
+                success: function (res) {
+
+                    if (res.status === 'success') {
+                        row.remove();
+                        updateTotalAmount();
+
+                        Swal.fire(
+                            'Deleted!',
+                            'Item removed successfully.',
+                            'success'
+                        );
+                    } else {
+                        Swal.fire('Error', res.message || 'Unable to delete item', 'error');
+                    }
+                },
+                error: function () {
+                    Swal.fire('Error', 'Server error while deleting', 'error');
+                }
+            });
+        });
+    });
+
+
+</script>
+
+{% endblock %}

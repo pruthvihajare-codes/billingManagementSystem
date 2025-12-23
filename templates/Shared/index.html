@@ -1,0 +1,105 @@
+{% extends "Shared/dashboard.html" %}
+{% load static %}
+{% load encryption_filters %}
+{% block content %}
+
+<!-- Custom Styles -->
+<link href="{% static 'vendor/fontawesome-free/css/all.min.css' %}" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css?family=Nunito:200,300,400,600,700,800,900" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'css/index.css' %}">
+<link href="{% static 'vendor/datatables/dataTables.bootstrap4.min.css' %}" rel="stylesheet">
+
+<!-- Page Heading -->
+<h1 class="h3 mb-4 text-gray-800">Welcome Back</h1>
+
+<!-- Main Card -->
+<div class="card shadow mb-4">
+    <div class="card-header py-3 d-flex justify-content-between align-items-center">
+        <h2 class="m-0 font-weight-bold text-primary">Select a Table to Place Order</h2>
+        <a href="{% url 'orderCreate' %}" class="btn btn-primary btn-icon-split">
+            <span class="icon text-white-50"><i class="fas fa-plus-circle"></i></span>
+            <span class="text">Take Away</span>
+        </a>
+    </div>
+
+    <div class="card-body">
+
+        <!-- NON-AC -->
+        <h4 class="text-secondary">Non-AC</h4>
+        <div class="category-buttons">
+            {% for table in non_ac_tables %}
+                {% with key=table.table_number|stringformat:"s"|add:"|"|add:table.category %}
+                <div class="table-card {% if key in ordered_tables_keys %}table-card-ordered{% endif %}">
+                    <a href="{% url 'orderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
+                        {{ table.table_number }}
+                        <div class="table-category">{{ table.category }}</div>
+                    </a>
+                    {% if key in ordered_tables_keys %}
+                    <div class="table-icons">
+                        <a href="{% url 'editOrderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
+                            <i class="fas fa-eye" title="View"></i>
+                        </a>
+                        <i class="fas fa-print" title="Print"></i>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endwith %}
+            {% empty %}
+                <p>No Non-AC tables available.</p>
+            {% endfor %}
+        </div>
+
+        <!-- AC -->
+        <h4 class="text-secondary">AC</h4>
+        <div class="category-buttons">
+            {% for table in ac_tables %}
+                {% with key=table.table_number|stringformat:"s"|add:"|"|add:table.category %}
+                <div class="table-card {% if key in ordered_tables_keys %}table-card-ordered{% endif %}">
+                    <a href="{% url 'orderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
+                        {{ table.table_number }}
+                        <div class="table-category">{{ table.category }}</div>
+                    </a>
+                    {% if key in ordered_tables_keys %}
+                    <div class="table-icons">
+                        <a href="{% url 'editOrderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
+                            <i class="fas fa-eye" title="View"></i>
+                        </a>
+                        <i class="fas fa-print" title="Print"></i>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endwith %}
+            {% empty %}
+                <p>No AC tables available.</p>
+            {% endfor %}
+        </div>
+
+        <!-- BAR -->
+        <h4 class="text-secondary">Bar</h4>
+        <div class="category-buttons">
+            {% for table in bar_tables %}
+                {% with key=table.table_number|stringformat:"s"|add:"|"|add:table.category %}
+                <div class="table-card {% if key in ordered_tables_keys %}table-card-ordered{% endif %}">
+                    <a href="{% url 'orderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
+                        {{ table.table_number }}
+                        <div class="table-category">{{ table.category }}</div>
+                    </a>
+                    {% if key in ordered_tables_keys %}
+                    <div class="table-icons">
+                        <a href="{% url 'editOrderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
+                            <i class="fas fa-eye" title="View"></i>
+                        </a>
+                        <i class="fas fa-print" title="Print"></i>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endwith %}
+            {% empty %}
+                <p>No Bar tables available.</p>
+            {% endfor %}
+        </div>
+
+    </div>
+</div>
+
+{% endblock %}

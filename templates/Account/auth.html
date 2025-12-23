@@ -1,0 +1,111 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Login / Sign Up</title>
+  <link rel="stylesheet" href="{% static 'css/auth.css' %}">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    .password-requirements {
+      color: red;
+      font-weight: bold;
+    }
+    .password-valid {
+      color: green !important;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card" id="login-card">
+    <h2>Login</h2>
+    <form method="POST" action="/auth/">
+      {% csrf_token %}
+      <div class="form-group">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" name="email" required pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" title="Please enter a valid email address (e.g., example@domain.com)">
+      </div>
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" name="password" required>
+      </div>
+      <button type="submit" name="login">Login</button>
+    </form>
+
+    <div class="link" onclick="toggleForm('signup')">Don't have an account? Sign up</div>
+    <div class="link">Forgot password?</div>
+  </div>
+
+  <div class="card hidden" id="signup-card">
+    <h2>Sign Up</h2>
+    <form method="POST" action="/auth/">
+      {% csrf_token %}
+      <div class="form-group">
+        <label for="signup-full-name">Full Name</label>
+        <input type="text" id="signup-full-name" name="full_name" required>
+      </div>
+      <div class="form-group">
+        <label for="signup-email">Email</label>
+        <input type="email" id="signup-email" name="email" required pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" title="Please enter a valid email address (e.g., example@domain.com)">
+      </div>
+      <div class="form-group">
+        <label for="signup-password">Password</label>
+        <input type="password" id="signup-password" name="password" required pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$" title="Password must be at least 8 characters long, contain at least one uppercase letter, one lowercase letter, and one number.">
+        <small id="pw-message" class="password-requirements">
+          Password must be at least 8 characters long, include one lowercase letter, one uppercase letter, and one number.
+        </small>
+      </div>
+      <div class="form-group">
+        <label for="signup-confirm">Confirm Password</label>
+        <input type="password" id="signup-confirm" name="confirm_password" required disabled>
+      </div>
+      <button type="submit" name="signup">Sign Up</button>
+    </form>
+
+    <div class="link" onclick="toggleForm('login')">Already have an account? Log in</div>
+  </div>
+
+  <script>
+    function toggleForm(form) {
+      document.getElementById('login-card').classList.toggle('hidden', form !== 'login');
+      document.getElementById('signup-card').classList.toggle('hidden', form !== 'signup');
+    }
+
+    function showSignupAlert() {
+      Swal.fire({
+        title: '{{ title }}',
+        text: '{{ error }}',
+        icon: 'error',
+      })
+    }
+
+    // Enable confirm password field only if password is valid
+    document.getElementById('signup-password').addEventListener('input', function () {
+      const passwordInput = this.value;
+      const confirmInput = document.getElementById('signup-confirm');
+      const pwMessage = document.getElementById('pw-message');
+      const pattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+
+      if (pattern.test(passwordInput)) {
+        confirmInput.disabled = false;
+        pwMessage.classList.remove('password-requirements');
+        pwMessage.classList.add('password-valid');
+      } else {
+        confirmInput.disabled = true;
+        pwMessage.classList.remove('password-valid');
+        pwMessage.classList.add('password-requirements');
+      }
+    });
+  </script>
+
+  {% if alert %}
+    <script>
+      showSignupAlert();
+    </script>
+  {% endif %}
+
+</body>
+</html>

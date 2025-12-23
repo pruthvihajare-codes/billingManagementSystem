@@ -1,0 +1,339 @@
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from billing.models import *
+from django.core.serializers import serialize
+from django.forms.models import model_to_dict
+from django.views.decorators.csrf import csrf_exempt
+import json
+from datetime import datetime
+from django.db.models import Max
+from django.db import connection
+from django.utils.timezone import localtime
+from billingManagementSystem.encryption import encrypt_parameter, decrypt_parameter
+from django.utils.timezone import make_aware
+from datetime import datetime, time
+from django.db.models import F
+import json
+from django.db import transaction
+from django.utils import timezone
+
+@login_required
+def orderDetailIndex(request):
+    full_name = getattr(request.user, 'full_name', 'User')
+    try:
+        non_ac_tables = TableMaster.objects.filter(category='Non-AC', is_active=1).values()
+        ac_tables = TableMaster.objects.filter(category='AC', is_active=1).values()
+        bar_tables = TableMaster.objects.filter(category='Bar', is_active=1).values()
+
+        with connection.cursor() as cursor:
+            cursor.callproc('stp_getOrderedFoodTable')
+            results = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            ordered_food_table = [dict(zip(columns, row)) for row in results]
+
+        ordered_tables_keys = {
+            f"{row['table_number']}|{row['table_category']}" for row in ordered_food_table
+        }
+
+        return render(request, 'Shared/index.html', {
+            'non_ac_tables': non_ac_tables,
+            'ac_tables': ac_tables,
+            'bar_tables': bar_tables,
+            'ordered_tables_keys': ordered_tables_keys,
+            'full_name': full_name,
+        })
+
+    except Exception as e:
+        print(f"Error rendering Shared/index.html: {e}")
+        return render(request, 'Shared/404.html', {'full_name': full_name}, status=404)
+    
+@login_required
+def orderCreate(request):
+    full_name = getattr(request.user, 'full_name', 'User')
+
+    try:
+        if request.method == "GET":
+
+            tableName = decrypt_parameter(str(request.GET.get("tableNo")))
+            Category = decrypt_parameter(str(request.GET.get("category")))
+
+            menu_items = MenuDetails.objects.filter(seating_category=Category).values_list('menu_name', flat=True)
+
+            return render(request, 'OrderFood/orderFoodCreate.html', {
+                "tableName":tableName,
+                "Category":Category,
+                "menu_items":menu_items
+            })
+
+
+        elif request.method == "POST":
+            final_order_flag = request.POST.get("finalOrder", '')
+            category = request.POST.get("Category", '')
+            service = request.POST.get("service", '')
+            dish = request.POST.get("dish", '')
+            selectedQty = request.POST.get("quantity", '')
+
+            if final_order_flag == 'finalOrder':
+                menu_item = None
+
+                if selectedQty == 'H':
+                    menu_item = MenuDetails.objects.filter(
+                        seating_category=category,
+                        menu_name=dish,
+                        menu_quantity_half__isnull=False
+                    ).first()
+                elif selectedQty == 'F':
+                    menu_item = MenuDetails.objects.filter(
+                        seating_category=category,
+                        menu_name=dish,
+                        menu_quantity_full__isnull=False
+                    ).first()
+
+                if menu_item:
+                    menu_item_data = model_to_dict(menu_item)
+                else:
+                    menu_item_data = {}
+
+                return JsonResponse({
+                    'message': 'Final order received successfully!',
+                    'menu_item': menu_item_data
+                })
+
+            else:
+                menu_names = MenuDetails.objects.filter(menu_category=category).values_list('menu_name', flat=True)
+                options = [{'id': idx, 'name': name} for idx, name in enumerate(menu_names)]
+                return JsonResponse({'options': options})
+
+    except Exception as e:
+        print(f"Error rendering orderFoodCreate.html: {e}")
+        return render(request, 'Shared/404.html', {'full_name': full_name}, status=404)
+
+@csrf_exempt
+@login_required
+def orderStoreDetails(request):
+    if request.method == 'POST':
+        try:
+            data = request.POST
+            table_no = data.get('table_no')
+            TableCategory = data.get('TableCategory')
+            order_items = json.loads(data.get('order_items'))
+
+            user = request.user
+
+            # Calculate daily_order_no that resets every day
+            today = timezone.now().date()
+            start_of_day = make_aware(datetime.combine(today, time.min))  # 00:00:00 today
+            end_of_day = make_aware(datetime.combine(today, time.max))    # 23:59:59.999999 today
+
+            last_order_today = Order.objects.filter(created_at__range=(start_of_day, end_of_day)).order_by('-daily_order_no').first()
+            if last_order_today and last_order_today.daily_order_no:
+                daily_order_no = last_order_today.daily_order_no + 1
+            else:
+                daily_order_no = 1
+
+            # Get totals and GST info
+            total_amount = float(data.get('total_amount', 0))
+            gst_applied = int(data.get('gst_applied', 0))
+            gst_amount = float(data.get('gst_amount', 0))
+            grand_total = float(data.get('grand_total', 0))
+
+            # Create the order
+            order = Order.objects.create(
+                table_no=table_no,
+                created_by=user,
+                created_at=timezone.now(),
+                status_id=1,
+                total_amount=total_amount,
+                gst_applied=gst_applied,
+                gst_amount=gst_amount,
+                grand_total=grand_total,
+                daily_order_no=daily_order_no,
+                table_category=TableCategory
+            )
+
+            # Create related order details
+            for item in order_items:
+                OrderDetail.objects.create(
+                    order=order,
+                    menu_name=item['menu_name'],
+                    menu_category=item['menu_category'],
+                    quantity_type=item['quantity_type'],
+                    quantity=item['quantity'],
+                    price=item['price'],
+                    created_by=user,
+                    created_at=timezone.now(),
+                    status_id=1
+                )
+
+            return JsonResponse({'status': 'success', 'order_id': order.pk, 'daily_order_no': daily_order_no})
+
+        except Exception as e:
+            return JsonResponse({'status': 'fail', 'error': str(e)}, status=500)
+
+    return JsonResponse({'status': 'fail', 'error': 'Invalid request method'}, status=405)
+
+@login_required
+def orderDetailsView(request):
+    full_name = getattr(request.user, 'full_name', 'User')
+
+    try:
+        order_id = decrypt_parameter(request.GET['order_id'])
+
+        table_no = Order.objects.get(order_id=order_id).table_no
+
+        order_details = OrderDetail.objects.filter(order__order_id=order_id).values(
+            'menu_category', 'menu_name', 'quantity_type', 'price'
+        )
+
+        return render(request, 'OrderFood/orderDetailsView.html', {
+            'order_details': order_details,
+            'full_name': full_name,
+            'order_id': order_id,
+            'table_no': table_no
+        })
+
+    except Exception as e:
+        print(f"Error rendering orderDetailsView: {e}")
+        return render(request, 'Shared/404.html', {
+            'full_name': full_name
+        }, status=404)
+
+@login_required
+def editOrderCreate(request):
+    full_name = getattr(request.user, 'full_name', 'User')
+
+    try:
+        tableName = decrypt_parameter(request.GET.get("tableNo"))
+        Category = decrypt_parameter(request.GET.get("category"))
+
+        # Fetch order
+        order = Order.objects.filter(
+            table_no=tableName,
+            table_category=Category
+        ).first()
+
+        if not order:
+            return render(request, 'Shared/404.html', status=404)
+
+        order_details = OrderDetail.objects.filter(order=order)
+
+        menu_items = MenuDetails.objects.filter(
+            seating_category=Category
+        ).values_list('menu_name', flat=True)
+
+        return render(request, 'OrderFood/editOrderCreate.html', {
+            "tableName": tableName,
+            "Category": Category,
+            "menu_items": menu_items,
+            "selected_order": order,
+            "order_details": order_details
+        })
+
+    except Exception as e:
+        print("Edit Order Error:", e)
+        return render(request, 'Shared/404.html', status=404)
+
+@login_required
+@transaction.atomic
+def orderUpdateDetails(request):
+    if request.method == "POST":
+        try:
+            order_id = decrypt_parameter(request.POST.get('order_id'))
+            order_items = json.loads(request.POST.get('order_items'))
+
+            order = Order.objects.get(order_id=order_id)
+
+            # Delete existing items
+            OrderDetail.objects.filter(order=order).delete()
+
+            # Insert updated items
+            for item in order_items:
+                OrderDetail.objects.create(
+                    order=order,
+                    menu_name=item['menu_name'],
+                    menu_category=item['menu_category'],
+                    quantity_type=item['quantity_type'],
+                    quantity=int(item['quantity']),
+                    price=float(item['price']),
+                    created_by=request.user
+                )
+
+            # Update order totals
+            order.total_amount = request.POST.get('total_amount')
+            order.gst_applied = request.POST.get('gst_applied')
+            order.gst_amount = request.POST.get('gst_amount')
+            order.grand_total = request.POST.get('grand_total')
+            order.updated_by = request.user
+            order.updated_at = timezone.now()
+            order.save()
+
+            return JsonResponse({"status": "success"})
+
+        except Exception as e:
+            print("Update Order Error:", e)
+            return JsonResponse({"status": "error"}, status=500)
+
+@login_required
+def get_menu_price(request):
+    menu_name = request.GET.get('menu_name')
+    quantity_type = request.GET.get('quantity_type')
+    seating_category = request.GET.get('seating_category')
+
+    try:
+        menu = MenuDetails.objects.get(
+            menu_name=menu_name,
+            seating_category=seating_category,
+            menu_isActive=1
+        )
+
+        price = (
+            menu.menu_half_price
+            if quantity_type == 'H'
+            else menu.menu_full_price
+        )
+
+        return JsonResponse({
+            'price': float(price),
+            'menu_category': menu.menu_category,
+            'menu_type': menu.menu_type
+        })
+
+    except MenuDetails.DoesNotExist:
+        return JsonResponse({'error': 'Item not found'}, status=404)
+
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from decimal import Decimal
+import json
+
+@csrf_exempt
+def delete_order_item(request):
+    if request.method == "POST":
+        enc_id = request.POST.get('order_detail_id')
+        order_detail_id = decrypt_parameter(enc_id)
+
+        try:
+            item = OrderDetail.objects.get(id=order_detail_id)
+            order = item.order
+
+            # Delete item
+            item.delete()
+
+            # Recalculate totals
+            items = OrderDetail.objects.filter(order=order)
+
+            total = sum(i.price * i.quantity for i in items)
+            gst = total * Decimal('0.18') if order.gst_applied else Decimal('0.00')
+
+            order.total_amount = total
+            order.gst_amount = gst
+            order.grand_total = total + gst
+            order.save()
+
+            return JsonResponse({'status': 'success'})
+
+        except OrderDetail.DoesNotExist:
+            return JsonResponse({'status': 'error', 'message': 'Item not found'})
+
+    return JsonResponse({'status': 'invalid'})
