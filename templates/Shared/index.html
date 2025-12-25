@@ -9,91 +9,466 @@
 <link rel="stylesheet" href="{% static 'css/index.css' %}">
 <link href="{% static 'vendor/datatables/dataTables.bootstrap4.min.css' %}" rel="stylesheet">
 
+<style>
+    /* PRU AF Header */
+    .pru-af-header {
+        background: linear-gradient(135deg, #4e73df 0%, #2e59d9 100%);
+        color: white;
+        padding: 12px 20px;
+        border-radius: 10px;
+        margin-bottom: 25px;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(78, 115, 223, 0.3);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .pru-af-header h2 {
+        font-weight: 800;
+        font-size: 28px;
+        letter-spacing: 2px;
+        margin: 0;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    .pru-af-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.3);
+    }
+    
+    /* Compact Category Buttons */
+    .category-buttons {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 12px;
+        margin-bottom: 25px;
+    }
+    
+    /* Smaller Table Cards */
+    .table-card {
+        background: linear-gradient(145deg, #ffffff, #f8f9fc);
+        border-radius: 10px;
+        padding: 15px 10px;
+        text-align: center;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 1px solid #e3e6f0;
+        box-shadow: 0 3px 5px rgba(0, 0, 0, 0.04);
+        position: relative;
+        overflow: hidden;
+        min-height: 110px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    .table-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.08);
+        border-color: #4e73df;
+    }
+    
+    .table-card a {
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        transition: all 0.3s ease;
+    }
+    
+    .table-card a:hover {
+        transform: scale(1.01);
+    }
+    
+    /* Occupied Table Styling */
+    .table-card-ordered {
+        background: linear-gradient(145deg, #f0f7ff, #e6f0ff);
+        border: 1px solid #4e73df;
+        position: relative;
+    }
+    
+    .table-card-ordered::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #4e73df, #2e59d9);
+        border-radius: 10px 10px 0 0;
+    }
+    
+    /* Smaller Table Number */
+    .table-number {
+        font-size: 24px;
+        font-weight: 700;
+        color: #2e59d9;
+        margin-bottom: 3px;
+        line-height: 1;
+    }
+    
+    .table-card a .table-number {
+        color: #2e59d9;
+        transition: all 0.3s ease;
+    }
+    
+    .table-card a:hover .table-number {
+        color: #224abe;
+        transform: scale(1.05);
+    }
+    
+    /* Smaller Table Category */
+    .table-category {
+        font-size: 11px;
+        color: #6c757d;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        margin-bottom: 8px;
+        padding: 3px 8px;
+        background: rgba(78, 115, 223, 0.08);
+        border-radius: 15px;
+    }
+    
+    /* Status Display */
+    .table-status {
+        margin-bottom: 10px;
+        min-height: 20px;
+    }
+    
+    .table-status .badge {
+        font-size: 10px;
+        padding: 4px 8px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        border-radius: 15px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .badge-warning {
+        background: linear-gradient(135deg, #f6c23e, #f8b400);
+        border: none;
+    }
+    
+    .badge-success {
+        background: linear-gradient(135deg, #1cc88a, #17a673);
+        border: none;
+    }
+    
+    /* Available Status - Smaller */
+    .table-available {
+        font-size: 11px;
+        color: #1cc88a;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin-top: 6px;
+    }
+    
+    .table-available i {
+        font-size: 12px;
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.7; }
+        100% { opacity: 1; }
+    }
+    
+    /* Smaller Table Icons */
+    .table-icons {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin-top: 8px;
+        padding-top: 10px;
+        border-top: 1px dashed #dee2e6;
+        width: 100%;
+    }
+    
+    .table-icons a, .table-icons i {
+        color: #6c757d;
+        font-size: 16px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+    }
+    
+    .table-icons a:hover, .table-icons i:hover {
+        color: #4e73df;
+        transform: translateY(-1px);
+    }
+    
+    /* Section Headings - Smaller */
+    h4.text-secondary {
+        color: #5a5c69 !important;
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-bottom: 15px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #e3e6f0;
+        position: relative;
+    }
+    
+    h4.text-secondary::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        width: 60px;
+        height: 2px;
+        background: linear-gradient(90deg, #4e73df, #2e59d9);
+    }
+    
+    /* Empty State */
+    .category-buttons:empty + p,
+    .category-buttons p:only-child {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 30px;
+        color: #6c757d;
+        font-style: italic;
+        background: #f8f9fc;
+        border-radius: 8px;
+        border: 1px dashed #dee2e6;
+        font-size: 14px;
+    }
+    
+    /* Smaller Click text */
+    .table-card a .text-muted {
+        font-size: 10px;
+    }
+    
+    /* Compact Page Heading */
+    .d-flex.justify-content-between.align-items-center.mb-4 {
+        margin-bottom: 20px !important;
+    }
+    
+    .status-legend .text-muted {
+        font-size: 12px;
+    }
+    
+    .legend-color {
+        width: 10px !important;
+        height: 10px !important;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .category-buttons {
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
+        }
+        
+        .table-number {
+            font-size: 22px;
+        }
+        
+        .pru-af-header h2 {
+            font-size: 24px;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .category-buttons {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        
+        .status-legend {
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: flex-start !important;
+        }
+        
+        .pru-af-header {
+            padding: 10px 15px;
+        }
+        
+        .pru-af-header h2 {
+            font-size: 20px;
+            letter-spacing: 1px;
+        }
+    }
+</style>
+
 <!-- Page Heading -->
-<h1 class="h3 mb-4 text-gray-800">Welcome Back</h1>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 text-gray-800">Welcome Back</h1>
+    <div class="status-legend d-flex gap-3">
+        <div class="d-flex align-items-center">
+            <div class="legend-color" style="width: 12px; height: 12px; background: linear-gradient(135deg, #1cc88a, #17a673); border-radius: 50%; margin-right: 6px;"></div>
+            <small class="text-muted">Available</small>
+        </div>
+        <div class="d-flex align-items-center">
+            <div class="legend-color" style="width: 12px; height: 12px; background: linear-gradient(135deg, #f6c23e, #f8b400); border-radius: 50%; margin-right: 6px;"></div>
+            <small class="text-muted">Awaiting Bill</small>
+        </div>
+        <div class="d-flex align-items-center">
+            <div class="legend-color" style="width: 12px; height: 12px; background: linear-gradient(135deg, #4e73df, #2e59d9); border-radius: 50%; margin-right: 6px;"></div>
+            <small class="text-muted">Bill Downloaded</small>
+        </div>
+    </div>
+</div>
 
 <!-- Main Card -->
-<div class="card shadow mb-4">
-    <div class="card-header py-3 d-flex justify-content-between align-items-center">
-        <h2 class="m-0 font-weight-bold text-primary">Select a Table to Place Order</h2>
-        <a href="{% url 'orderCreate' %}" class="btn btn-primary btn-icon-split">
+<div class="card shadow mb-4 border-0">
+    <div class="card-header py-3 d-flex justify-content-between align-items-center bg-white border-0">
+        <h2 class="m-0 font-weight-bold text-primary" style="font-size: 1.3rem;">Select a Table to Place Order</h2>
+        <a href="{% url 'orderCreate' %}" class="btn btn-primary btn-icon-split shadow-sm" style="padding: 6px 12px; font-size: 0.875rem;">
             <span class="icon text-white-50"><i class="fas fa-plus-circle"></i></span>
             <span class="text">Take Away</span>
         </a>
     </div>
 
-    <div class="card-body">
+    <div class="card-body p-3">
 
         <!-- NON-AC -->
-        <h4 class="text-secondary">Non-AC</h4>
+        <h4 class="text-secondary mb-3">🍽️ Non-AC Section</h4>
         <div class="category-buttons">
             {% for table in non_ac_tables %}
-                {% with key=table.table_number|stringformat:"s"|add:"|"|add:table.category %}
-                <div class="table-card {% if key in ordered_tables_keys %}table-card-ordered{% endif %}">
-                    <a href="{% url 'orderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
-                        {{ table.table_number }}
+                <div class="table-card {% if table.has_order %}table-card-ordered{% endif %}">
+                    {% if table.has_order %}
+                        <!-- Table has active order - show status and edit link only -->
+                        <div class="table-number">{{ table.table_number }}</div>
                         <div class="table-category">{{ table.category }}</div>
-                    </a>
-                    {% if key in ordered_tables_keys %}
-                    <div class="table-icons">
-                        <a href="{% url 'editOrderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
-                            <i class="fas fa-eye" title="View"></i>
+                        <div class="table-status">
+                            {% if table.order_status == "Awaiting Bill" %}
+                                <span class="badge badge-warning">
+                                    <i class="fas fa-clock mr-1"></i> {{ table.order_status }}
+                                </span>
+                            {% elif table.order_status == "Bill Downloaded" %}
+                                <span class="badge badge-success">
+                                    <i class="fas fa-file-invoice-dollar mr-1"></i> {{ table.order_status }}
+                                </span>
+                            {% endif %}
+                        </div>
+                        <div class="table-icons">
+                            <a href="{% url 'editOrderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
+                                <i class="fas fa-edit" title="Edit Order"></i>
+                            </a>
+                            <a href="#" class="print-action" data-table="{{ table.table_number }}" data-category="{{ table.category }}">
+                                <i class="fas fa-print" title="Print Bill"></i>
+                            </a>
+                        </div>
+                    {% else %}
+                        <!-- Table is free - show create link -->
+                        <a href="{% url 'orderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
+                            <div class="table-number">{{ table.table_number }}</div>
+                            <div class="table-category">{{ table.category }}</div>
+                            <div class="table-available">
+                                <i class="fas fa-check-circle"></i> Available
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-muted">Click to order</small>
+                            </div>
                         </a>
-                        <i class="fas fa-print" title="Print"></i>
-                    </div>
                     {% endif %}
                 </div>
-                {% endwith %}
             {% empty %}
                 <p>No Non-AC tables available.</p>
             {% endfor %}
         </div>
 
         <!-- AC -->
-        <h4 class="text-secondary">AC</h4>
+        <h4 class="text-secondary mb-3 mt-4">❄️ AC Section</h4>
         <div class="category-buttons">
             {% for table in ac_tables %}
-                {% with key=table.table_number|stringformat:"s"|add:"|"|add:table.category %}
-                <div class="table-card {% if key in ordered_tables_keys %}table-card-ordered{% endif %}">
-                    <a href="{% url 'orderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
-                        {{ table.table_number }}
+                <div class="table-card {% if table.has_order %}table-card-ordered{% endif %}">
+                    {% if table.has_order %}
+                        <!-- Table has active order - show status and edit link only -->
+                        <div class="table-number">{{ table.table_number }}</div>
                         <div class="table-category">{{ table.category }}</div>
-                    </a>
-                    {% if key in ordered_tables_keys %}
-                    <div class="table-icons">
-                        <a href="{% url 'editOrderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
-                            <i class="fas fa-eye" title="View"></i>
+                        <div class="table-status">
+                            {% if table.order_status == "Awaiting Bill" %}
+                                <span class="badge badge-warning">
+                                    <i class="fas fa-clock mr-1"></i> {{ table.order_status }}
+                                </span>
+                            {% elif table.order_status == "Bill Downloaded" %}
+                                <span class="badge badge-success">
+                                    <i class="fas fa-file-invoice-dollar mr-1"></i> {{ table.order_status }}
+                                </span>
+                            {% endif %}
+                        </div>
+                        <div class="table-icons">
+                            <a href="{% url 'editOrderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
+                                <i class="fas fa-edit" title="Edit Order"></i>
+                            </a>
+                            <a href="#" class="print-action" data-table="{{ table.table_number }}" data-category="{{ table.category }}">
+                                <i class="fas fa-print" title="Print Bill"></i>
+                            </a>
+                        </div>
+                    {% else %}
+                        <!-- Table is free - show create link -->
+                        <a href="{% url 'orderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
+                            <div class="table-number">{{ table.table_number }}</div>
+                            <div class="table-category">{{ table.category }}</div>
+                            <div class="table-available">
+                                <i class="fas fa-check-circle"></i> Available
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-muted">Click to order</small>
+                            </div>
                         </a>
-                        <i class="fas fa-print" title="Print"></i>
-                    </div>
                     {% endif %}
                 </div>
-                {% endwith %}
             {% empty %}
                 <p>No AC tables available.</p>
             {% endfor %}
         </div>
 
         <!-- BAR -->
-        <h4 class="text-secondary">Bar</h4>
+        <h4 class="text-secondary mb-3 mt-4">🍻 Bar Section</h4>
         <div class="category-buttons">
             {% for table in bar_tables %}
-                {% with key=table.table_number|stringformat:"s"|add:"|"|add:table.category %}
-                <div class="table-card {% if key in ordered_tables_keys %}table-card-ordered{% endif %}">
-                    <a href="{% url 'orderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
-                        {{ table.table_number }}
+                <div class="table-card {% if table.has_order %}table-card-ordered{% endif %}">
+                    {% if table.has_order %}
+                        <!-- Table has active order - show status and edit link only -->
+                        <div class="table-number">{{ table.table_number }}</div>
                         <div class="table-category">{{ table.category }}</div>
-                    </a>
-                    {% if key in ordered_tables_keys %}
-                    <div class="table-icons">
-                        <a href="{% url 'editOrderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
-                            <i class="fas fa-eye" title="View"></i>
+                        <div class="table-status">
+                            {% if table.order_status == "Awaiting Bill" %}
+                                <span class="badge badge-warning">
+                                    <i class="fas fa-clock mr-1"></i> {{ table.order_status }}
+                                </span>
+                            {% elif table.order_status == "Bill Downloaded" %}
+                                <span class="badge badge-success">
+                                    <i class="fas fa-file-invoice-dollar mr-1"></i> {{ table.order_status }}
+                                </span>
+                            {% endif %}
+                        </div>
+                        <div class="table-icons">
+                            <a href="{% url 'editOrderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
+                                <i class="fas fa-edit" title="Edit Order"></i>
+                            </a>
+                            <a href="#" class="print-action" data-table="{{ table.table_number }}" data-category="{{ table.category }}">
+                                <i class="fas fa-print" title="Print Bill"></i>
+                            </a>
+                        </div>
+                    {% else %}
+                        <!-- Table is free - show create link -->
+                        <a href="{% url 'orderCreate' %}?tableNo={{ table.table_number|enc }}&category={{ table.category|enc }}">
+                            <div class="table-number">{{ table.table_number }}</div>
+                            <div class="table-category">{{ table.category }}</div>
+                            <div class="table-available">
+                                <i class="fas fa-check-circle"></i> Available
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-muted">Click to order</small>
+                            </div>
                         </a>
-                        <i class="fas fa-print" title="Print"></i>
-                    </div>
                     {% endif %}
                 </div>
-                {% endwith %}
             {% empty %}
                 <p>No Bar tables available.</p>
             {% endfor %}
@@ -101,5 +476,71 @@
 
     </div>
 </div>
+
+<!-- JavaScript for Print functionality -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Print functionality
+        document.querySelectorAll('.print-action').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const tableNo = this.getAttribute('data-table');
+                const category = this.getAttribute('data-category');
+                
+                Swal.fire({
+                    title: 'Print Bill?',
+                    text: `Print bill for Table ${tableNo} (${category})?`,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#4e73df',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: '<i class="fas fa-print"></i> Print',
+                    cancelButtonText: 'Cancel',
+                    background: '#f8f9fc',
+                    backdrop: 'rgba(0,0,0,0.4)'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // Show loading
+                        Swal.fire({
+                            title: 'Printing...',
+                            text: 'Sending bill to printer',
+                            icon: 'info',
+                            showConfirmButton: false,
+                            allowOutsideClick: false,
+                            didOpen: () => {
+                                Swal.showLoading();
+                            }
+                        });
+                        
+                        // Simulate API call (replace with actual API)
+                        setTimeout(() => {
+                            Swal.fire({
+                                title: 'Success!',
+                                text: `Bill for Table ${tableNo} sent to printer`,
+                                icon: 'success',
+                                confirmButtonColor: '#4e73df',
+                                confirmButtonText: 'OK',
+                                timer: 2000,
+                                timerProgressBar: true
+                            });
+                        }, 1500);
+                    }
+                });
+            });
+        });
+        
+        // Add hover effect to table cards
+        document.querySelectorAll('.table-card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.zIndex = '10';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.zIndex = '1';
+            });
+        });
+    });
+</script>
 
 {% endblock %}

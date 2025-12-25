@@ -18,36 +18,82 @@ import json
 from django.db import transaction
 from django.utils import timezone
 
+# @login_required
+# def orderDetailIndex(request):
+#     full_name = getattr(request.user, 'full_name', 'User')
+#     try:
+#         non_ac_tables = TableMaster.objects.filter(category='Non-AC', is_active=1).values()
+#         ac_tables = TableMaster.objects.filter(category='AC', is_active=1).values()
+#         bar_tables = TableMaster.objects.filter(category='Bar', is_active=1).values()
+
+#         with connection.cursor() as cursor:
+#             cursor.callproc('stp_getOrderedFoodTable')
+#             results = cursor.fetchall()
+#             columns = [col[0] for col in cursor.description]
+#             ordered_food_table = [dict(zip(columns, row)) for row in results]
+
+#         ordered_tables_keys = {
+#             f"{row['table_number']}|{row['table_category']}" for row in ordered_food_table
+#         }
+
+#         return render(request, 'Shared/index.html', {
+#             'non_ac_tables': non_ac_tables,
+#             'ac_tables': ac_tables,
+#             'bar_tables': bar_tables,
+#             'ordered_tables_keys': ordered_tables_keys,
+#             'full_name': full_name,
+#         })
+
+#     except Exception as e:
+#         print(f"Error rendering Shared/index.html: {e}")
+#         return render(request, 'Shared/404.html', {'full_name': full_name}, status=404)
+
 @login_required
 def orderDetailIndex(request):
     full_name = getattr(request.user, 'full_name', 'User')
     try:
-        non_ac_tables = TableMaster.objects.filter(category='Non-AC', is_active=1).values()
-        ac_tables = TableMaster.objects.filter(category='AC', is_active=1).values()
-        bar_tables = TableMaster.objects.filter(category='Bar', is_active=1).values()
+        # Get all active tables by category
+        non_ac_tables = TableMaster.objects.filter(category='Non-AC', is_active=1)
+        ac_tables = TableMaster.objects.filter(category='AC', is_active=1)
+        bar_tables = TableMaster.objects.filter(category='Bar', is_active=1)
 
-        with connection.cursor() as cursor:
-            cursor.callproc('stp_getOrderedFoodTable')
-            results = cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            ordered_food_table = [dict(zip(columns, row)) for row in results]
-
-        ordered_tables_keys = {
-            f"{row['table_number']}|{row['table_category']}" for row in ordered_food_table
-        }
+        # Get tables that have active orders (status 1 or 2)
+        from django.db.models import Q
+        
+        # Get active orders with status
+        active_orders = Order.objects.filter(
+            Q(status_id=1) | Q(status_id=2)
+        ).select_related('status').values('table_no', 'table_category', 'status__status_name')
+        
+        # Create lookup dictionary
+        order_lookup = {}
+        for order in active_orders:
+            key = f"{order['table_no']}|{order['table_category']}"
+            order_lookup[key] = order['status__status_name']
+        
+        # Add has_order and status to each table object
+        def add_table_status(tables):
+            for table in tables:
+                key = f"{table.table_number}|{table.category}"
+                table.has_order = key in order_lookup
+                table.order_status = order_lookup.get(key, '')
+            return tables
+        
+        non_ac_tables = add_table_status(non_ac_tables)
+        ac_tables = add_table_status(ac_tables)
+        bar_tables = add_table_status(bar_tables)
 
         return render(request, 'Shared/index.html', {
             'non_ac_tables': non_ac_tables,
             'ac_tables': ac_tables,
             'bar_tables': bar_tables,
-            'ordered_tables_keys': ordered_tables_keys,
             'full_name': full_name,
         })
 
     except Exception as e:
         print(f"Error rendering Shared/index.html: {e}")
         return render(request, 'Shared/404.html', {'full_name': full_name}, status=404)
-    
+
 @login_required
 def orderCreate(request):
     full_name = getattr(request.user, 'full_name', 'User')

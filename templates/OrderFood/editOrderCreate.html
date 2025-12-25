@@ -31,308 +31,594 @@
 
 <div class="card shadow mb-4">
     <div class="card-header py-3">
-
         <h2 class="m-0 font-weight-bold text-primary">Edit Food Order</h2>
-
+    </div>
+    
+    <div class="card-body">
         <!-- REQUIRED HIDDEN FIELDS -->
         <input type="hidden" id="order-id" value="{{ selected_order.order_id|enc }}">
         <input type="hidden" id="TableCategory" value="{{ Category }}">
 
-        <!-- TOP CONTROLS -->
-        <div class="row mt-4">
-            <div class="col-md-3">
-                <input type="text" id="service-dropdown"
-                       class="form-control"
-                       value="{{ tableName }}" readonly>
-            </div>
-
-            <div class="col-md-3">
-                <input list="dish-list" id="next-dropdown"
-                       class="form-control" placeholder="Add dish...">
-                <datalist id="dish-list">
-                    {% for dish in menu_items %}
-                        <option value="{{ dish }}"></option>
-                    {% endfor %}
-                </datalist>
-            </div>
-
-            <div class="col-md-3">
-                <div class="custom-radio-group">
-                    <label class="custom-radio">
-                        <input type="radio" name="quantity" value="H">
-                        Half
-                    </label>
-                    <label class="custom-radio">
-                        <input type="radio" name="quantity" value="F">
-                        Full
-                    </label>
-                </div>
-            </div>
-        </div>
-
-        <!-- MAIN CONTENT -->
-        <div class="row mt-4">
-
-            <!-- ORDER TABLE -->
-            <div class="col-md-8" id="order-summary-container">
-                <h5>Selected Orders</h5>
-                <table class="table table-bordered" id="order-summary">
-                    <thead>
-                        <tr>
-                            <th>Dish</th>
-                            <th>Category</th>
-                            <th>Quantity</th>
-                            <th>How Much</th>
-                            <th>Price</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-
-                        {% for item in order_details %}
-                            <tr data-unit-price="{{ item.price }}"
-                                data-order-detail-id="{{ item.id|enc }}">
-                                <td>{{ item.menu_name }}</td>
-                                <td>{{ item.menu_category }}</td>
-                                <td>{% if item.quantity_type == 'H' %}Half{% else %}Full{% endif %}</td>
-                                <td>
-                                    <input type="number"
-                                        class="form-control form-control-sm dynamic-qty"
-                                        min="1" value="{{ item.quantity }}">
-                                </td>
-                                <td class="price-cell">₹{{ item.price|floatformat:2 }}</td>
-                                <td>
-                                    <button type="button"
-                                            class="btn btn-danger btn-sm delete-row">
-                                        Delete
-                                    </button>
-                                </td>
-                            </tr>
-                        {% endfor %}
-
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- BILLING SUMMARY -->
-            <div class="col-md-4" id="billingSummaryCard">
-                <div class="card shadow-sm border-0 h-100">
+        <div class="row">
+            <!-- LEFT SIDE: ORDER CONTROLS & TABLE -->
+            <div class="col-md-8">
+                <!-- CONTROLS SECTION -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Add Items</h5>
+                    </div>
                     <div class="card-body">
-                        <h5 class="text-center mb-3">💰 Billing Summary</h5>
-
-                        <ul class="list-group list-group-flush mb-3">
-                            <li class="list-group-item d-flex justify-content-between">
-                                <strong>Total</strong>
-                                <span id="total-amount">₹{{ selected_order.total_amount }}</span>
-                            </li>
-
-                            <li class="list-group-item d-flex justify-content-between">
-                                <div>
-                                    <input type="checkbox" id="gst-checkbox"
-                                           {% if selected_order.gst_applied %}checked{% endif %}>
-                                    Apply GST (18%)
+                        <div class="row">
+                            <!-- Table Number -->
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label class="form-label font-weight-bold">Table Number</label>
+                                    <input type="text" id="service-dropdown"
+                                           class="form-control form-control-lg"
+                                           value="{{ tableName }}" readonly>
                                 </div>
-                                <span id="gst-amount">₹{{ selected_order.gst_amount }}</span>
-                            </li>
+                            </div>
 
-                            <li class="list-group-item d-flex justify-content-between bg-light">
-                                <strong>Grand Total</strong>
-                                <strong id="grand-total">₹{{ selected_order.grand_total }}</strong>
-                            </li>
-                        </ul>
+                            <!-- Add Dish -->
+                            <div class="col-md-5">
+                                <div class="form-group">
+                                    <label class="form-label font-weight-bold">Add Dish</label>
+                                    <input list="dish-list" id="next-dropdown"
+                                           class="form-control form-control-lg" placeholder="Type dish name...">
+                                    <datalist id="dish-list">
+                                        {% for dish in menu_items %}
+                                            <option value="{{ dish }}"></option>
+                                        {% endfor %}
+                                    </datalist>
+                                </div>
+                            </div>
 
-                        <div class="text-center">
-                            <button class="btn btn-primary" id="save-order-btn">
-                                Update Order
-                            </button>
+                            <!-- Portion Size -->
+                            <div class="col-md-3">
+                                <div class="form-group">
+                                    <label class="form-label font-weight-bold d-block">Portion Size</label>
+                                    <div class="custom-radio-group">
+                                        <label class="custom-radio">
+                                            <input type="radio" name="quantity" value="H">
+                                            Half
+                                        </label>
+                                        <label class="custom-radio">
+                                            <input type="radio" name="quantity" value="F">
+                                            Full
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SELECTED ORDERS TABLE -->
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Selected Orders</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-hover mb-0" id="order-summary">
+                                <thead class="thead-light sticky-top" style="top: 0;">
+                                    <tr>
+                                        <th>Dish</th>
+                                        <th>Category</th>
+                                        <th>Portion</th>
+                                        <th>Quantity</th>
+                                        <th>Price</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in order_details %}
+                                        <tr data-unit-price="{{ item.price }}"
+                                            data-order-detail-id="{{ item.id|enc }}">
+                                            <td>{{ item.menu_name }}</td>
+                                            <td><span class="badge badge-info">{{ item.menu_category }}</span></td>
+                                            <td>
+                                                <span class="badge {% if item.quantity_type == 'H' %}badge-warning{% else %}badge-success{% endif %}">
+                                                    {% if item.quantity_type == 'H' %}Half{% else %}Full{% endif %}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <input type="number"
+                                                    class="form-control form-control-sm dynamic-qty"
+                                                    min="1" value="{{ item.quantity }}" style="width: 70px;">
+                                            </td>
+                                            <td class="price-cell font-weight-bold">₹{{ item.price|floatformat:2 }}</td>
+                                            <td>
+                                                <button type="button"
+                                                        class="btn btn-danger btn-sm delete-row">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             </div>
 
+            <!-- RIGHT SIDE: BILLING SUMMARY -->
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 h-100">
+                    <!-- Restaurant Header -->
+                    <div class="text-center p-3 bg-dark text-white">
+                        <h4 class="mb-1">Restaurant Name</h4>
+                        <p class="mb-0 small">Your Restaurant Slogan Here</p>
+                        <hr class="my-2" style="border-color: rgba(255,255,255,0.2)">
+                    </div>
+                    
+                    <!-- Bill Details -->
+                    <div class="p-3" style="height: calc(100% - 200px); overflow-y: auto;">
+                        <!-- Order Info -->
+                        <div class="row mb-2 small">
+                            <div class="col-6">
+                                <strong>Bill No:</strong> {{ selected_order.order_id }}
+                            </div>
+                            <div class="col-6 text-right">
+                                <strong>Date:</strong> {{ selected_order.created_at|date:"d/m/Y" }}
+                            </div>
+                        </div>
+                        <div class="row mb-3 small">
+                            <div class="col-12">
+                                <strong>Table:</strong> {{ tableName }} ({{ Category }})
+                            </div>
+                        </div>
+                        
+                        <!-- Items Table -->
+                        <div class="table-responsive mb-3">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr class="bg-light">
+                                        <th class="py-1" style="width: 40%">Item</th>
+                                        <th class="py-1 text-center" style="width: 20%">Type</th>
+                                        <th class="py-1 text-center" style="width: 15%">Qty</th>
+                                        <th class="py-1 text-right" style="width: 25%">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="restaurant-bill-items">
+                                    <!-- Will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Calculations -->
+                        <div class="border-top pt-2">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Subtotal</span>
+                                <span id="restaurant-subtotal">₹0.00</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>
+                                    <input type="checkbox" id="gst-checkbox" class="mr-1"
+                                        {% if selected_order.gst_applied %}checked{% endif %}>
+                                    GST @18%
+                                </span>
+                                <span id="restaurant-gst">₹0.00</span>
+                            </div>
+                            <hr class="my-2">
+                            <div class="d-flex justify-content-between">
+                                <strong>TOTAL PAYABLE</strong>
+                                <strong id="restaurant-grand-total">₹0.00</strong>
+                            </div>
+                        </div>
+                        
+                        <!-- Footer Note -->
+                        <div class="text-center mt-3 small text-muted">
+                            Thank you for dining with us!
+                        </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="card-footer">
+                        <div class="row">
+                            <div class="col-4">
+                                <button class="btn btn-secondary w-100" id="go-back-btn">
+                                    <i class="fas fa-arrow-left"></i> Back
+                                </button>
+                            </div>
+                            <div class="col-4">
+                                <button class="btn btn-primary w-100" id="save-order-btn">
+                                    <i class="fas fa-save"></i> Save
+                                </button>
+                            </div>
+                            <div class="col-4">
+                                <button class="btn btn-success w-100" id="print-bill-btn">
+                                    <i class="fas fa-print"></i> Print
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-
     </div>
 </div>
 
 <!-- JS -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-<script>
-    $(document).ready(function () {
-        updateTotalAmount();
-    });
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
 
-    $('input[name="quantity"]').on('change', function () {
+    <script>
 
-        const dish = $('#next-dropdown').val();
-        const qtyType = $('input[name="quantity"]:checked').val();
-        const seatingCategory = $('#TableCategory').val();
+        $(document).ready(function () {
+            updateBillSummary();
+        });
 
-        if (!dish) {
-            alert("Select dish first");
-            return;
+        // Function to check for duplicates
+        function isDishAlreadyAdded(dishName, portionType) {
+            let isDuplicate = false;
+            
+            $('#order-summary tbody tr').each(function () {
+                const existingDish = $(this).find('td:eq(0)').text();
+                const existingPortion = $(this).find('td:eq(2)').text().trim();
+                
+                if (existingDish === dishName && existingPortion === portionType) {
+                    isDuplicate = true;
+                    return false; // Break out of the loop
+                }
+            });
+            
+            return isDuplicate;
         }
 
-        $.ajax({
-            url: "{% url 'get_menu_price' %}",
-            type: "GET",
-            data: {
-                menu_name: dish,
-                quantity_type: qtyType,
-                seating_category: seatingCategory
-            },
-            success: function (res) {
+        // SINGLE event handler for quantity radio buttons
+        $('input[name="quantity"]').on('change', function () {
+            const dish = $('#next-dropdown').val();
+            const qtyType = $('input[name="quantity"]:checked').val();
+            const qtyText = qtyType === 'H' ? 'Half' : 'Full';
+            const seatingCategory = $('#TableCategory').val();
 
-                const qtyText = qtyType === 'H' ? 'Half' : 'Full';
-
-                $('#order-summary tbody').append(`
-                    <tr data-unit-price="${res.price}">
-                        <td>${dish}</td>
-                        <td>${res.menu_category}</td>
-                        <td>${qtyText}</td>
-                        <td>
-                            <input type="number"
-                                class="form-control form-control-sm dynamic-qty"
-                                value="1" min="1">
-                        </td>
-                        <td class="price-cell">₹${res.price.toFixed(2)}</td>
-                        <td>
-                            <button class="btn btn-danger btn-sm delete-row">
-                                Delete
-                            </button>
-                        </td>
-                    </tr>
-                `);
-
-                updateTotalAmount();
-            }
-        });
-
-        $('#next-dropdown').val('');
-        $('input[name="quantity"]').prop('checked', false);
-    });
-
-
-    /* QTY CHANGE */
-    $(document).on('input', '.dynamic-qty', updateTotalAmount);
-
-    /* GST TOGGLE */
-    $('#gst-checkbox').on('change', updateTotalAmount);
-
-    /* TOTAL CALC */
-    function updateTotalAmount() {
-        let total = 0;
-
-        $('#order-summary tbody tr').each(function () {
-            const price = parseFloat($(this).data('unit-price'));
-            const qty = parseInt($(this).find('.dynamic-qty').val()) || 1;
-            total += price * qty;
-        });
-
-        const gst = $('#gst-checkbox').is(':checked') ? total * 0.18 : 0;
-
-        $('#total-amount').text(`₹${total.toFixed(2)}`);
-        $('#gst-amount').text(`₹${gst.toFixed(2)}`);
-        $('#grand-total').text(`₹${(total + gst).toFixed(2)}`);
-    }
-
-    /* UPDATE ORDER */
-    $('#save-order-btn').on('click', function () {
-
-        const items = [];
-
-        $('#order-summary tbody tr').each(function () {
-            items.push({
-                menu_name: $(this).find('td:eq(0)').text(),
-                menu_category: $(this).find('td:eq(1)').text(),
-                quantity_type: $(this).find('td:eq(2)').text() === 'Half' ? 'H' : 'F',
-                quantity: $(this).find('.dynamic-qty').val(),
-                price: $(this).data('unit-price')
-            });
-        });
-
-        $.ajax({
-            url: "{% url 'orderUpdateDetails' %}",
-            type: "POST",
-            data: {
-                order_id: $('#order-id').val(),
-                order_items: JSON.stringify(items),
-                total_amount: $('#total-amount').text().replace('₹',''),
-                gst_applied: $('#gst-checkbox').is(':checked') ? 1 : 0,
-                gst_amount: $('#gst-amount').text().replace('₹',''),
-                grand_total: $('#grand-total').text().replace('₹',''),
-                csrfmiddlewaretoken: '{{ csrf_token }}'
-            },
-            success: function () {
-                alert("Order updated successfully");
-                window.location.href = "{% url 'orderDetailIndex' %}";
-            }
-        });
-    });
-
-    $(document).on('click', '.delete-row', function () {
-
-        const row = $(this).closest('tr');
-        const orderDetailIdEnc = row.data('order-detail-id'); // may be undefined
-
-        Swal.fire({
-            title: 'Are you sure?',
-            text: "This item will be removed from the order",
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#d33',
-            cancelButtonColor: '#3085d6',
-            confirmButtonText: 'Yes, delete it'
-        }).then((result) => {
-
-            if (!result.isConfirmed) return;
-
-            // 🟢 CASE 1: Item NOT saved yet → remove from UI only
-            if (!orderDetailIdEnc) {
-                row.remove();
-                updateTotalAmount();
-
-                Swal.fire(
-                    'Removed',
-                    'Item removed from list.',
-                    'success'
-                );
+            if (!dish) {
+                Swal.fire('Warning', 'Please select a dish first', 'warning');
+                $('input[name="quantity"]').prop('checked', false);
                 return;
             }
 
-            // 🔴 CASE 2: Item exists in DB → delete from DB
+            if (!qtyType) {
+                Swal.fire('Warning', 'Please select portion size (Half/Full)', 'warning');
+                $('input[name="quantity"]').prop('checked', false);
+                return;
+            }
+
+            // Check if dish with same portion already exists
+            if (isDishAlreadyAdded(dish, qtyText)) {
+                Swal.fire({
+                    title: 'Duplicate Item',
+                    text: `${dish} (${qtyText}) is already in the order. Would you like to increase quantity instead?`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#3085d6',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: 'Yes, Increase Quantity',
+                    cancelButtonText: 'No, Cancel'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // Find the existing row and increase quantity
+                        $('#order-summary tbody tr').each(function () {
+                            const existingDish = $(this).find('td:eq(0)').text();
+                            const existingPortion = $(this).find('td:eq(2)').text().trim();
+                            
+                            if (existingDish === dish && existingPortion === qtyText) {
+                                const qtyInput = $(this).find('.dynamic-qty');
+                                const currentQty = parseInt(qtyInput.val()) || 1;
+                                qtyInput.val(currentQty + 1);
+                                
+                                // Trigger change to update bill
+                                qtyInput.trigger('input');
+                                
+                                Swal.fire('Quantity Updated', `Increased ${dish} (${qtyText}) quantity to ${currentQty + 1}`, 'success');
+                                return false; // Break out of loop
+                            }
+                        });
+                    }
+                    
+                    // Reset inputs for both cases
+                    $('#next-dropdown').val('');
+                    $('input[name="quantity"]').prop('checked', false);
+                });
+                
+                return; // CRITICAL: Return here to prevent AJAX call
+            }
+
+            // If not duplicate, proceed with AJAX call
             $.ajax({
-                url: "{% url 'delete_order_item' %}",
-                type: "POST",
+                url: "{% url 'get_menu_price' %}",
+                type: "GET",
                 data: {
-                    order_detail_id: orderDetailIdEnc,
-                    csrfmiddlewaretoken: '{{ csrf_token }}'
+                    menu_name: dish,
+                    quantity_type: qtyType,
+                    seating_category: seatingCategory
                 },
                 success: function (res) {
+                    const badgeClass = qtyType === 'H' ? 'badge-warning' : 'badge-success';
 
-                    if (res.status === 'success') {
-                        row.remove();
-                        updateTotalAmount();
+                    $('#order-summary tbody').append(`
+                        <tr data-unit-price="${res.price}">
+                            <td>${dish}</td>
+                            <td><span class="badge badge-info">${res.menu_category}</span></td>
+                            <td><span class="badge ${badgeClass}">${qtyText}</span></td>
+                            <td>
+                                <input type="number"
+                                    class="form-control form-control-sm dynamic-qty"
+                                    value="1" min="1" style="width: 70px;">
+                            </td>
+                            <td class="price-cell font-weight-bold">₹${res.price.toFixed(2)}</td>
+                            <td>
+                                <button class="btn btn-danger btn-sm delete-row">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `);
 
-                        Swal.fire(
-                            'Deleted!',
-                            'Item removed successfully.',
-                            'success'
-                        );
-                    } else {
-                        Swal.fire('Error', res.message || 'Unable to delete item', 'error');
-                    }
+                    updateBillSummary();
+                    $('#next-dropdown').val('');
+                    $('input[name="quantity"]').prop('checked', false);
+                    
+                    // Show success message
+                    // Swal.fire('Added!', `${dish} (${qtyText}) added to order`, 'success');
                 },
-                error: function () {
-                    Swal.fire('Error', 'Server error while deleting', 'error');
+                error: function() {
+                    Swal.fire('Error', 'Item not found or not available', 'error');
                 }
             });
         });
-    });
 
+        // Update bill summary function
+        function updateBillSummary() {
+            let total = 0;
+            const items = [];
+            
+            // Clear existing bill items
+            $('#restaurant-bill-items').empty();
+            
+            // Process each order item
+            $('#order-summary tbody tr').each(function () {
+                const menuName = $(this).find('td:eq(0)').text();
+                const qtyType = $(this).find('td:eq(2)').text().trim();
+                const qty = parseInt($(this).find('.dynamic-qty').val()) || 1;
+                const unitPrice = parseFloat($(this).data('unit-price'));
+                const itemTotal = unitPrice * qty;
+                
+                total += itemTotal;
+                
+                items.push({
+                    name: menuName,
+                    type: qtyType,
+                    qty: qty,
+                    unitPrice: unitPrice,
+                    total: itemTotal
+                });
+                
+                // Add to restaurant bill
+                $('#restaurant-bill-items').append(`
+                    <tr>
+                        <td class="small py-1">${menuName}</td>
+                        <td class="text-center small py-1">
+                            <span class="badge ${qtyType === 'Half' ? 'badge-warning' : 'badge-success'}">
+                                ${qtyType}
+                            </span>
+                        </td>
+                        <td class="text-center small py-1">${qty}</td>
+                        <td class="text-right small py-1">₹${itemTotal.toFixed(2)}</td>
+                    </tr>
+                `);
+            });
+            
+            // Calculate GST and totals
+            const gstApplied = $('#gst-checkbox').is(':checked');
+            const gstAmount = gstApplied ? total * 0.18 : 0;
+            const grandTotal = total + gstAmount;
+            
+            // Update displays
+            $('#restaurant-subtotal').text(`₹${total.toFixed(2)}`);
+            $('#restaurant-gst').text(`₹${gstAmount.toFixed(2)}`);
+            $('#restaurant-grand-total').text(`₹${grandTotal.toFixed(2)}`);
+            
+            return {
+                total: total,
+                gstAmount: gstAmount,
+                grandTotal: grandTotal,
+                items: items
+            };
+        }
 
-</script>
+        // Event listeners
+        $(document).on('input', '.dynamic-qty', updateBillSummary);
+        $('#gst-checkbox').on('change', updateBillSummary);
+
+        // Print Bill Function
+        $('#print-bill-btn').on('click', function() {
+            const printWindow = window.open('', '_blank');
+            const billData = updateBillSummary();
+            
+            printWindow.document.write(`
+                <html>
+                    <head>
+                        <title>Bill - Order #{{ selected_order.order_id }}</title>
+                        <style>
+                            body { font-family: 'Courier New', monospace; padding: 15px; }
+                            .text-center { text-align: center; }
+                            .text-right { text-align: right; }
+                            table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+                            th, td { padding: 5px; border-bottom: 1px dashed #ccc; }
+                            .total-row { border-top: 2px solid #000; padding-top: 10px; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="text-center">
+                            <h3>Restaurant Name</h3>
+                            <p>Your Restaurant Address<br>Phone: 123-456-7890</p>
+                            <hr>
+                        </div>
+                        
+                        <p><strong>Bill No:</strong> {{ selected_order.order_id }}</p>
+                        <p><strong>Table:</strong> {{ tableName }} ({{ Category }})</p>
+                        <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+                        
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Item</th>
+                                    <th class="text-center">Type</th>
+                                    <th class="text-center">Qty</th>
+                                    <th class="text-right">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${billData.items.map(item => `
+                                    <tr>
+                                        <td>${item.name}</td>
+                                        <td class="text-center">${item.type}</td>
+                                        <td class="text-center">${item.qty}</td>
+                                        <td class="text-right">₹${item.total.toFixed(2)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                        
+                        <div class="total-row">
+                            <p>Subtotal: ₹${billData.total.toFixed(2)}</p>
+                            <p>GST (18%): ₹${billData.gstAmount.toFixed(2)}</p>
+                            <h3>Grand Total: ₹${billData.grandTotal.toFixed(2)}</h3>
+                        </div>
+                        
+                        <div class="text-center" style="margin-top: 30px;">
+                            <p>Thank you for dining with us!</p>
+                            <p>** GST included in the bill **</p>
+                        </div>
+                    </body>
+                </html>
+            `);
+            
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => {
+                printWindow.print();
+                printWindow.close();
+            }, 500);
+        });
+
+        // Update Order
+        $('#save-order-btn').on('click', function () {
+            const items = [];
+            const billData = updateBillSummary();
+
+            $('#order-summary tbody tr').each(function () {
+                items.push({
+                    menu_name: $(this).find('td:eq(0)').text(),
+                    menu_category: $(this).find('td:eq(1)').text().replace('badge-info', '').replace('badge', '').trim(),
+                    quantity_type: $(this).find('td:eq(2)').text() === 'Half' ? 'H' : 'F',
+                    quantity: $(this).find('.dynamic-qty').val(),
+                    price: $(this).data('unit-price')
+                });
+            });
+
+            $.ajax({
+                url: "{% url 'orderUpdateDetails' %}",
+                type: "POST",
+                data: {
+                    order_id: $('#order-id').val(),
+                    order_items: JSON.stringify(items),
+                    total_amount: billData.total,
+                    gst_applied: $('#gst-checkbox').is(':checked') ? 1 : 0,
+                    gst_amount: billData.gstAmount,
+                    grand_total: billData.grandTotal,
+                    csrfmiddlewaretoken: '{{ csrf_token }}'
+                },
+                success: function () {
+                    Swal.fire({
+                        title: 'Success!',
+                        text: 'Order updated successfully',
+                        icon: 'success',
+                        confirmButtonText: 'OK'
+                    });
+                    // Just show success message, stay on page
+                    // User can click browser back button or menu item to go back
+                },
+                error: function() {
+                    Swal.fire('Error', 'Failed to update order', 'error');
+                }
+            });
+        });
+
+        // Delete row
+        $(document).on('click', '.delete-row', function () {
+            const row = $(this).closest('tr');
+            const orderDetailIdEnc = row.data('order-detail-id');
+
+            Swal.fire({
+                title: 'Are you sure?',
+                text: "This item will be removed from the order",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Yes, delete it'
+            }).then((result) => {
+                if (!result.isConfirmed) return;
+
+                if (!orderDetailIdEnc) {
+                    row.remove();
+                    updateBillSummary();
+                    Swal.fire('Removed', 'Item removed from list.', 'success');
+                    return;
+                }
+
+                $.ajax({
+                    url: "{% url 'delete_order_item' %}",
+                    type: "POST",
+                    data: {
+                        order_detail_id: orderDetailIdEnc,
+                        csrfmiddlewaretoken: '{{ csrf_token }}'
+                    },
+                    success: function (res) {
+                        if (res.status === 'success') {
+                            row.remove();
+                            updateBillSummary();
+                            Swal.fire('Deleted!', 'Item removed successfully.', 'success');
+                        } else {
+                            Swal.fire('Error', res.message || 'Unable to delete item', 'error');
+                        }
+                    },
+                    error: function () {
+                        Swal.fire('Error', 'Server error while deleting', 'error');
+                    }
+                });
+            });
+        });
+    
+        // Go Back button
+        $('#go-back-btn').on('click', function() {
+            // Optional: Ask for confirmation if there are unsaved changes
+            if ($('#order-summary tbody tr').length > 0) {
+                Swal.fire({
+                    title: 'Leave this page?',
+                    text: 'You have items in your order. Are you sure you want to leave?',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#3085d6',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: 'Yes, go back',
+                    cancelButtonText: 'Stay here'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = "{% url 'orderDetailIndex' %}";
+                    }
+                });
+            } else {
+                window.location.href = "{% url 'orderDetailIndex' %}";
+            }
+        });
+
+    </script>
 
 {% endblock %}
