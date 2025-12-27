@@ -17,36 +17,7 @@ from django.db.models import F
 import json
 from django.db import transaction
 from django.utils import timezone
-
-# @login_required
-# def orderDetailIndex(request):
-#     full_name = getattr(request.user, 'full_name', 'User')
-#     try:
-#         non_ac_tables = TableMaster.objects.filter(category='Non-AC', is_active=1).values()
-#         ac_tables = TableMaster.objects.filter(category='AC', is_active=1).values()
-#         bar_tables = TableMaster.objects.filter(category='Bar', is_active=1).values()
-
-#         with connection.cursor() as cursor:
-#             cursor.callproc('stp_getOrderedFoodTable')
-#             results = cursor.fetchall()
-#             columns = [col[0] for col in cursor.description]
-#             ordered_food_table = [dict(zip(columns, row)) for row in results]
-
-#         ordered_tables_keys = {
-#             f"{row['table_number']}|{row['table_category']}" for row in ordered_food_table
-#         }
-
-#         return render(request, 'Shared/index.html', {
-#             'non_ac_tables': non_ac_tables,
-#             'ac_tables': ac_tables,
-#             'bar_tables': bar_tables,
-#             'ordered_tables_keys': ordered_tables_keys,
-#             'full_name': full_name,
-#         })
-
-#     except Exception as e:
-#         print(f"Error rendering Shared/index.html: {e}")
-#         return render(request, 'Shared/404.html', {'full_name': full_name}, status=404)
+ 
 
 @login_required
 def orderDetailIndex(request):
@@ -94,24 +65,89 @@ def orderDetailIndex(request):
         print(f"Error rendering Shared/index.html: {e}")
         return render(request, 'Shared/404.html', {'full_name': full_name}, status=404)
 
+# @login_required
+# def orderCreate(request):
+#     full_name = getattr(request.user, 'full_name', 'User')
+
+#     try:
+#         if request.method == "GET":
+
+#             tableName = decrypt_parameter(str(request.GET.get("tableNo")))
+#             Category = decrypt_parameter(str(request.GET.get("category")))
+
+#             menu_items = MenuDetails.objects.filter(seating_category=Category).values_list('menu_name', flat=True)
+
+#             # Get tax rates (ADD THIS LINE)
+#             tax_rates = get_tax_rates()
+
+#             return render(request, 'OrderFood/orderFoodCreate.html', {
+#                 "tableName":tableName,
+#                 "Category":Category,
+#                 "menu_items":menu_items,
+#                 "tax_rates":tax_rates,
+#             })
+
+
+#         elif request.method == "POST":
+#             final_order_flag = request.POST.get("finalOrder", '')
+#             category = request.POST.get("Category", '')
+#             service = request.POST.get("service", '')
+#             dish = request.POST.get("dish", '')
+#             selectedQty = request.POST.get("quantity", '')
+
+#             if final_order_flag == 'finalOrder':
+#                 menu_item = None
+
+#                 if selectedQty == 'H':
+#                     menu_item = MenuDetails.objects.filter(
+#                         seating_category=category,
+#                         menu_name=dish,
+#                         menu_quantity_half__isnull=False
+#                     ).first()
+#                 elif selectedQty == 'F':
+#                     menu_item = MenuDetails.objects.filter(
+#                         seating_category=category,
+#                         menu_name=dish,
+#                         menu_quantity_full__isnull=False
+#                     ).first()
+
+#                 if menu_item:
+#                     menu_item_data = model_to_dict(menu_item)
+#                 else:
+#                     menu_item_data = {}
+
+#                 return JsonResponse({
+#                     'message': 'Final order received successfully!',
+#                     'menu_item': menu_item_data
+#                 })
+
+#             else:
+#                 menu_names = MenuDetails.objects.filter(menu_category=category).values_list('menu_name', flat=True)
+#                 options = [{'id': idx, 'name': name} for idx, name in enumerate(menu_names)]
+#                 return JsonResponse({'options': options})
+
+#     except Exception as e:
+#         print(f"Error rendering orderFoodCreate.html: {e}")
+#         return render(request, 'Shared/404.html', {'full_name': full_name}, status=404)
+
 @login_required
 def orderCreate(request):
     full_name = getattr(request.user, 'full_name', 'User')
 
     try:
         if request.method == "GET":
-
             tableName = decrypt_parameter(str(request.GET.get("tableNo")))
             Category = decrypt_parameter(str(request.GET.get("category")))
 
             menu_items = MenuDetails.objects.filter(seating_category=Category).values_list('menu_name', flat=True)
+            tax_rates = get_tax_rates()
 
             return render(request, 'OrderFood/orderFoodCreate.html', {
-                "tableName":tableName,
-                "Category":Category,
-                "menu_items":menu_items
+                "tableName": tableName,
+                "Category": Category,
+                "menu_items": menu_items,
+                "tax_rates": tax_rates,
             })
-
 
         elif request.method == "POST":
             final_order_flag = request.POST.get("finalOrder", '')
@@ -119,30 +155,95 @@ def orderCreate(request):
             service = request.POST.get("service", '')
             dish = request.POST.get("dish", '')
             selectedQty = request.POST.get("quantity", '')
-
+            
             if final_order_flag == 'finalOrder':
-                menu_item = None
-
-                if selectedQty == 'H':
-                    menu_item = MenuDetails.objects.filter(
-                        seating_category=category,
-                        menu_name=dish,
-                        menu_quantity_half__isnull=False
-                    ).first()
-                elif selectedQty == 'F':
-                    menu_item = MenuDetails.objects.filter(
-                        seating_category=category,
-                        menu_name=dish,
-                        menu_quantity_full__isnull=False
-                    ).first()
-
-                if menu_item:
-                    menu_item_data = model_to_dict(menu_item)
+                # Get the menu item
+                menu_item = MenuDetails.objects.filter(
+                    seating_category=category,
+                    menu_name=dish,
+                    menu_isActive=True
+                ).first()
+                
+                if not menu_item:
+                    return JsonResponse({
+                        'error': 'Item not found',
+                        'menu_item': {}
+                    })
+                
+                qty_display = ""
+                unit_price = 0
+                total_price = 0
+                
+                # Handle different measurement types
+                if menu_item.menu_measurement == 'half_full':
+                    # For half/full items
+                    if selectedQty == 'H':
+                        price = menu_item.menu_half_price
+                        qty_display = "Half"
+                        unit_price = float(price) if price else 0
+                        total_price = unit_price
+                    elif selectedQty == 'F':
+                        price = menu_item.menu_full_price
+                        qty_display = "Full"
+                        unit_price = float(price) if price else 0
+                        total_price = unit_price
+                    else:
+                        return JsonResponse({
+                            'error': 'Invalid portion for this item',
+                            'menu_item': {}
+                        })
                 else:
-                    menu_item_data = {}
-
+                    # For non-half/full items (piece, bottle, ml, etc.)
+                    qty = int(request.POST.get("qty", 1))
+                    
+                    if menu_item.menu_measurement == 'piece':
+                        # For piece-based items like pizza
+                        unit_price = float(menu_item.menu_full_price) if menu_item.menu_full_price else 0
+                        qty_display = f"{qty} {menu_item.measurement_unit or menu_item.menu_measurement}"
+                        total_price = unit_price * qty  # Total price for all pieces
+                        selectedQty = 'F'
+                    elif menu_item.menu_measurement == 'ml':
+                        # For ml items (like Pepsi 500ml bottle)
+                        # quantity = number of bottles
+                        quantity = int(request.POST.get("qty", 1))
+                        
+                        # For fixed bottle items, price is per bottle
+                        unit_price = float(menu_item.menu_full_price)  # Price per bottle
+                        
+                        # Get ml_qty for display
+                        ml_qty = request.POST.get("ml_qty", '500')
+                        try:
+                            ml_qty = int(ml_qty)
+                            qty_display = f"{ml_qty}ml"
+                        except:
+                            qty_display = menu_item.measurement_unit or "500ml"
+                        
+                        total_price = unit_price * quantity
+                    
+                    else:
+                        # For other measurement types (bottle, glass, slice, plate)
+                        unit_price = float(menu_item.menu_full_price) if menu_item.menu_full_price else 0
+                        qty_display = f"{qty} {menu_item.measurement_unit or menu_item.menu_measurement}"
+                        total_price = unit_price * qty
+                        selectedQty = 'F'
+                
+                # Prepare response data
+                menu_item_data = {
+                    'menu_name': menu_item.menu_name,
+                    'menu_category': menu_item.menu_category,
+                    'menu_type': menu_item.menu_type,
+                    'menu_measurement': menu_item.menu_measurement,
+                    'measurement_unit': menu_item.measurement_unit,
+                    'qty_display': qty_display,
+                    'unit_price': str(unit_price),  # Price per unit
+                    'total_price': str(total_price),  # Total price for the quantity
+                    'selected_qty': selectedQty,
+                    'quantity': request.POST.get("qty", "1"),
+                    'ml_qty': request.POST.get("ml_qty", "")
+                }
+                
                 return JsonResponse({
-                    'message': 'Final order received successfully!',
+                    'message': 'Item added successfully',
                     'menu_item': menu_item_data
                 })
 
@@ -150,10 +251,98 @@ def orderCreate(request):
                 menu_names = MenuDetails.objects.filter(menu_category=category).values_list('menu_name', flat=True)
                 options = [{'id': idx, 'name': name} for idx, name in enumerate(menu_names)]
                 return JsonResponse({'options': options})
-
+           
     except Exception as e:
-        print(f"Error rendering orderFoodCreate.html: {e}")
-        return render(request, 'Shared/404.html', {'full_name': full_name}, status=404)
+        print(f"Error in orderCreate: {e}")
+        return JsonResponse({'error': str(e)})
+
+@login_required
+def get_dish_details(request):
+    """Get details of a specific dish for frontend UI"""
+    try:
+        dish_name = request.GET.get('dish_name')
+        category = request.GET.get('category')
+        
+        if not dish_name or not category:
+            return JsonResponse({'success': False, 'error': 'Missing parameters'})
+        
+        dish = MenuDetails.objects.filter(
+            menu_name=dish_name,
+            seating_category=category,
+            menu_isActive=True
+        ).first()
+        
+        if dish:
+            # Get price based on measurement type
+            price = None
+            if dish.menu_measurement == 'half_full':
+                price = {
+                    'half': str(dish.menu_half_price) if dish.menu_half_price else "0",
+                    'full': str(dish.menu_full_price) if dish.menu_full_price else "0"
+                }
+            else:
+                price = str(dish.menu_full_price) if dish.menu_full_price else "0"
+            
+            return JsonResponse({
+                'success': True,
+                'item': {
+                    'menu_name': dish.menu_name,
+                    'menu_category': dish.menu_category,
+                    'menu_type': dish.menu_type,
+                    'menu_measurement': dish.menu_measurement,
+                    'measurement_unit': dish.measurement_unit,
+                    'menu_half_price': str(dish.menu_half_price) if dish.menu_half_price else None,
+                    'menu_full_price': str(dish.menu_full_price) if dish.menu_full_price else None,
+                    'price': price
+                }
+            })
+        else:
+            return JsonResponse({'success': False, 'error': 'Dish not found'})
+    except Exception as e:
+        print(f"Error in get_dish_details: {e}")
+        return JsonResponse({'success': False, 'error': str(e)})
+
+def get_tax_rates():
+    try:
+        """Get tax rates ONLY from database"""
+        rates = {}
+        
+        # Get food GST
+        food_param = TblParameterMaster.objects.filter(
+            parameter_name='GST_RATE', 
+            is_active=1
+        ).first()
+        if food_param:
+            rates['food_gst'] = float(food_param.parameter_value)
+        
+        # Get drink GST
+        drink_param = TblParameterMaster.objects.filter(
+            parameter_name='DRINK_GST_RATE', 
+            is_active=1
+        ).first()
+        if drink_param:
+            rates['drink_gst'] = float(drink_param.parameter_value)
+            
+        # Get service charge rate
+        service_param = TblParameterMaster.objects.filter(
+            parameter_name='SERVICE_CHARGE_RATE', 
+            is_active=1
+        ).first()
+        if service_param:
+            rates['service_charge'] = float(service_param.parameter_value)
+            
+        # Check if service charge is enabled
+        enabled_param = TblParameterMaster.objects.filter(
+            parameter_name='SERVICE_CHARGE_ENABLED', 
+            is_active=1
+        ).first()
+        if enabled_param:
+            rates['service_enabled'] = enabled_param.parameter_value == '1'
+        
+        return rates
+    except Exception as e:
+        print(f"Error getting tax rates: {e}")
+        return {}
 
 @csrf_exempt
 @login_required

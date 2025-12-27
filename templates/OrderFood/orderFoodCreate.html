@@ -69,6 +69,13 @@
     }
 </style>
 
+<!-- In your orderFoodCreate.html, add this after the form -->
+<!-- TAX RATES FROM DATABASE -->
+<input type="hidden" id="food-gst-rate" value="{{ tax_rates.food_gst }}">
+<input type="hidden" id="drink-gst-rate" value="{{ tax_rates.drink_gst }}">
+<input type="hidden" id="service-charge-rate" value="{{ tax_rates.service_charge }}">
+<input type="hidden" id="service-charge-enabled" value="{{ tax_rates.service_enabled|yesno:'1,0' }}">
+
 <div class="card shadow mb-4">
     <div class="card-header py-3">
         <h2 class="m-0 font-weight-bold text-primary">Order Food</h2>
@@ -115,19 +122,22 @@
                                 </div>
                             </div>
 
-                            <!-- Portion Size -->
+                            <!-- Portion Size - Updated with dynamic controls -->
                             <div class="col-md-3">
                                 <div class="form-group">
-                                    <label class="form-label font-weight-bold d-block">Portion Size</label>
-                                    <div class="custom-radio-group">
-                                        <label class="custom-radio">
-                                            <input type="radio" name="quantity" value="H">
-                                            <span class="radio-label">Half</span>
-                                        </label>
-                                        <label class="custom-radio">
-                                            <input type="radio" name="quantity" value="F">
-                                            <span class="radio-label">Full</span>
-                                        </label>
+                                    <label class="form-label font-weight-bold d-block">Portion</label>
+                                    <div id="portion-controls">
+                                        <!-- Dynamic controls will be loaded here -->
+                                        <div class="custom-radio-group">
+                                            <label class="custom-radio">
+                                                <input type="radio" name="quantity" value="H">
+                                                <span class="radio-label">Half</span>
+                                            </label>
+                                            <label class="custom-radio">
+                                                <input type="radio" name="quantity" value="F">
+                                                <span class="radio-label">Full</span>
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -213,13 +223,22 @@
                                 <span>Subtotal</span>
                                 <span id="restaurant-subtotal">₹0.00</span>
                             </div>
-                            <div class="d-flex justify-content-between mb-1">
-                                <span>
-                                    <input type="checkbox" id="gst-checkbox" class="mr-1">
-                                    GST @18%
-                                </span>
-                                <span id="restaurant-gst">₹0.00</span>
+                            
+                            <!-- ADD GST TOGGLE HERE -->
+                            <div class="form-check mb-2 small">
+                                <input class="form-check-input" type="checkbox" id="apply-gst-checkbox" checked>
+                                <label class="form-check-label" for="apply-gst-checkbox">
+                                    Apply GST & Service Charges
+                                </label>
                             </div>
+                            
+                            <!-- Tax Breakdown (Dynamic) -->
+                            <div id="tax-breakdown">
+                                <!-- Will show: Food GST @5% = ₹XX.XX -->
+                                <!-- Will show: Drink GST @18% = ₹XX.XX -->
+                                <!-- Will show: Service Charge @5% = ₹XX.XX -->
+                            </div>
+                            
                             <hr class="my-2">
                             <div class="d-flex justify-content-between">
                                 <strong>TOTAL PAYABLE</strong>
@@ -265,6 +284,9 @@
 <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
 
 <script>
+    // Global variable to track current item measurement type
+    let currentMeasurementType = 'half_full';
+    
     // Set current date for bill
     $(document).ready(function() {
         const now = new Date();
@@ -272,55 +294,98 @@
         $('#bill-date').text(formattedDate);
     });
 
+    // Function to check if category is a drink
+    function isDrinkCategory(category, menuType) {
+        if (!category) return false;
+        
+        const lowerCategory = category.toLowerCase().trim();
+        const lowerMenuType = (menuType || '').toLowerCase().trim();
+        
+        // Alcoholic drinks get 18% GST
+        const alcoholicKeywords = [
+            'alcohol', 'cocktail', 'wine', 'beer', 'spirit', 'liquor', 'bar',
+            'whisky', 'vodka', 'rum', 'gin', 'tequila', 'brandy'
+        ];
+        
+        // Non-alcoholic drinks (soft drinks, juices) get 5% GST
+        const nonAlcoholicKeywords = [
+            'soft drink', 'juice', 'cola', 'soda', 'water', 'coffee', 'tea'
+        ];
+        
+        // Check if it's an alcoholic drink
+        return alcoholicKeywords.some(keyword => 
+            lowerCategory.includes(keyword) || 
+            lowerMenuType.includes(keyword)
+        );
+    }
+
     // Function to check for duplicates
-    function isDishAlreadyAdded(dishName, portionType) {
+    function isDishAlreadyAdded(dishName, portionType, measurementType) {
         let isDuplicate = false;
         
         $('#order-summary tbody tr').each(function () {
             const existingDish = $(this).find('td:eq(0)').text();
-            const existingPortion = $(this).find('td:eq(2)').text().trim();
             
-            if (existingDish === dishName && existingPortion === portionType) {
+            if (existingDish === dishName) {
                 isDuplicate = true;
-                return false; // Break out of the loop
+                return false;
             }
         });
         
         return isDuplicate;
     }
 
-    // Function to update bill summary
+    // SIMPLE TAX CALCULATION
     function updateBillSummary() {
-        let total = 0;
+        let foodTotal = 0;
+        let drinkTotal = 0;
         const items = [];
         
-        // Clear existing bill items
+        // Get rates from hidden fields
+        const foodGstRate = parseFloat($('#food-gst-rate').val()) || 5;
+        const drinkGstRate = parseFloat($('#drink-gst-rate').val()) || 18;
+        const serviceChargeRate = parseFloat($('#service-charge-rate').val()) || 5;
+        const serviceChargeEnabled = $('#service-charge-enabled').val() === '1';
+        
+        // Check if GST should be applied
+        const applyGst = $('#apply-gst-checkbox').is(':checked');
+        
+        // Clear bill items
         $('#restaurant-bill-items').empty();
         
-        // Process each order item
+        // Process each item
         $('#order-summary tbody tr').each(function () {
             const menuName = $(this).find('td:eq(0)').text();
+            const category = $(this).find('td:eq(1)').text()
+                .replace('badge-info', '')
+                .replace('badge', '')
+                .replace(/<[^>]*>/g, '')
+                .trim();
             const qtyType = $(this).find('td:eq(2)').text().trim();
             const qty = parseInt($(this).find('.dynamic-qty').val()) || 1;
-            const unitPrice = parseFloat($(this).data('unit-price'));
-            const itemTotal = unitPrice * qty;
+            const priceText = $(this).find('.price-cell').text().replace('₹', '');
+            const itemTotal = parseFloat(priceText) || 0;
             
-            total += itemTotal;
+            const isDrink = isDrinkCategory(category);
+            
+            if (isDrink) {
+                drinkTotal += itemTotal;
+            } else {
+                foodTotal += itemTotal;
+            }
             
             items.push({
                 name: menuName,
-                type: qtyType,
-                qty: qty,
-                unitPrice: unitPrice,
-                total: itemTotal
+                total: itemTotal,
+                isDrink: isDrink
             });
             
-            // Add to restaurant bill
+            // Add to bill display
             $('#restaurant-bill-items').append(`
                 <tr>
                     <td class="small py-1">${menuName}</td>
                     <td class="text-center small py-1">
-                        <span class="badge ${qtyType === 'Half' ? 'badge-warning' : 'badge-success'}">
+                        <span class="badge ${qtyType.includes('Half') ? 'badge-warning' : qtyType.includes('Full') ? 'badge-success' : 'badge-primary'}">
                             ${qtyType}
                         </span>
                     </td>
@@ -330,98 +395,397 @@
             `);
         });
         
-        // Calculate GST and totals
-        const gstApplied = $('#gst-checkbox').is(':checked');
-        const gstAmount = gstApplied ? total * 0.18 : 0;
-        const grandTotal = total + gstAmount;
+        // Calculate amounts
+        const subtotal = foodTotal + drinkTotal;
         
-        // Update displays
-        $('#restaurant-subtotal').text(`₹${total.toFixed(2)}`);
-        $('#restaurant-gst').text(`₹${gstAmount.toFixed(2)}`);
+        // Only calculate taxes if GST checkbox is checked
+        let foodGst = 0;
+        let drinkGst = 0;
+        let totalGst = 0;
+        let serviceCharge = 0;
+        
+        if (applyGst) {
+            foodGst = (foodTotal * foodGstRate) / 100;
+            drinkGst = (drinkTotal * drinkGstRate) / 100;
+            totalGst = foodGst + drinkGst;
+            
+            if (serviceChargeEnabled) {
+                serviceCharge = (subtotal * serviceChargeRate) / 100;
+            }
+        }
+        
+        const grandTotal = subtotal + totalGst + serviceCharge;
+        
+        // UPDATE DISPLAY
+        $('#restaurant-subtotal').text(`₹${subtotal.toFixed(2)}`);
+        
+        // Build tax display - only show if GST is applied
+        let taxHtml = '';
+        
+        if (applyGst) {
+            if (foodTotal > 0 && foodGst > 0) {
+                taxHtml += `<div class="d-flex justify-content-between mb-1 small">
+                    <span>Food GST @${foodGstRate}%</span>
+                    <span>₹${foodGst.toFixed(2)}</span>
+                </div>`;
+            }
+            
+            if (drinkTotal > 0 && drinkGst > 0) {
+                taxHtml += `<div class="d-flex justify-content-between mb-1 small">
+                    <span>Drink GST @${drinkGstRate}%</span>
+                    <span>₹${drinkGst.toFixed(2)}</span>
+                </div>`;
+            }
+            
+            if (serviceChargeEnabled && serviceCharge > 0) {
+                taxHtml += `<div class="d-flex justify-content-between mb-1 small">
+                    <span>Service Charge @${serviceChargeRate}%</span>
+                    <span>₹${serviceCharge.toFixed(2)}</span>
+                </div>`;
+            }
+        } else {
+            taxHtml = `<div class="text-muted small mb-1">
+                <i>GST & Service Charges not applied</i>
+            </div>`;
+        }
+        
+        // Update tax breakdown
+        $('#tax-breakdown').html(taxHtml);
         $('#restaurant-grand-total').text(`₹${grandTotal.toFixed(2)}`);
         
-        // Also update the original summary if needed
-        $('#total-amount').text(`₹${total.toFixed(2)}`);
-        $('#gst-amount').text(`₹${gstAmount.toFixed(2)}`);
-        $('#grand-total').text(`₹${grandTotal.toFixed(2)}`);
-        
+        // Return data for printing
         return {
-            total: total,
-            gstAmount: gstAmount,
+            subtotal: subtotal,
+            foodGst: foodGst,
+            drinkGst: drinkGst,
+            totalGst: totalGst,
+            serviceCharge: serviceCharge,
             grandTotal: grandTotal,
-            items: items
+            items: items,
+            foodGstRate: foodGstRate,
+            drinkGstRate: drinkGstRate,
+            applyGst: applyGst
         };
     }
 
-    // Event handler for quantity radio buttons
-    $('input[name="quantity"]').on('change', function () {
+    // When dish is selected, check its type and update UI
+    $('#next-dropdown').on('input', function() {
+        const selectedDish = $(this).val();
+        const category = $('#TableCategory').val();
+        
+        if (!selectedDish) {
+            // Reset to default if empty
+            currentMeasurementType = 'half_full';
+            $('#portion-controls').html(`
+                <div class="custom-radio-group">
+                    <label class="custom-radio">
+                        <input type="radio" name="quantity" value="H">
+                        <span class="radio-label">Half</span>
+                    </label>
+                    <label class="custom-radio">
+                        <input type="radio" name="quantity" value="F">
+                        <span class="radio-label">Full</span>
+                    </label>
+                </div>
+            `);
+            return;
+        }
+        
+        // Get dish details
+        $.ajax({
+            url: "{% url 'get_dish_details' %}",
+            type: 'GET',
+            data: {
+                dish_name: selectedDish,
+                category: category
+            },
+            success: function(response) {
+                if (response.success) {
+                    const item = response.item;
+                    currentMeasurementType = item.menu_measurement;
+                    
+                    // IMPORTANT: If measurement is NOT half_full, auto-add to order
+                    if (currentMeasurementType !== 'half_full') {
+                        // Auto-add the item with default quantity 1
+                        autoAddNonHalfFullItem(selectedDish, item);
+                        
+                        // Clear the dropdown after adding
+                        $('#next-dropdown').val('');
+                        
+                        // Show simple message instead of controls
+                        $('#portion-controls').html(`
+                            <div class="alert alert-success py-2 mb-0 small">
+                                <i class="fas fa-check-circle"></i> Added to order
+                            </div>
+                        `);
+                        
+                        // Reset after 1.5 seconds
+                        setTimeout(() => {
+                            $('#portion-controls').html(`
+                                <div class="custom-radio-group">
+                                    <label class="custom-radio">
+                                        <input type="radio" name="quantity" value="H">
+                                        <span class="radio-label">Half</span>
+                                    </label>
+                                    <label class="custom-radio">
+                                        <input type="radio" name="quantity" value="F">
+                                        <span class="radio-label">Full</span>
+                                    </label>
+                                </div>
+                            `);
+                            currentMeasurementType = 'half_full';
+                        }, 1500);
+                    } else {
+                        // For half/full items, show radio buttons as before
+                        $('#portion-controls').html(`
+                            <div class="custom-radio-group">
+                                <label class="custom-radio">
+                                    <input type="radio" name="quantity" value="H">
+                                    <span class="radio-label">Half</span>
+                                </label>
+                                <label class="custom-radio">
+                                    <input type="radio" name="quantity" value="F">
+                                    <span class="radio-label">Full</span>
+                                </label>
+                            </div>
+                        `);
+                        // Clear any radio selection
+                        $('input[name="quantity"]').prop('checked', false);
+                    }
+                } else {
+                    // Default to half/full if not found
+                    currentMeasurementType = 'half_full';
+                    $('#portion-controls').html(`
+                        <div class="custom-radio-group">
+                            <label class="custom-radio">
+                                <input type="radio" name="quantity" value="H">
+                                <span class="radio-label">Half</span>
+                            </label>
+                            <label class="custom-radio">
+                                <input type="radio" name="quantity" value="F">
+                                <span class="radio-label">Full</span>
+                            </label>
+                        </div>
+                    `);
+                }
+            },
+            error: function() {
+                // If API fails, show default half/full
+                currentMeasurementType = 'half_full';
+                $('#portion-controls').html(`
+                    <div class="custom-radio-group">
+                        <label class="custom-radio">
+                            <input type="radio" name="quantity" value="H">
+                            <span class="radio-label">Half</span>
+                        </label>
+                        <label class="custom-radio">
+                            <input type="radio" name="quantity" value="F">
+                            <span class="radio-label">Full</span>
+                        </label>
+                    </div>
+                `);
+            }
+        });
+    });
+
+    // Function to auto-add non-half_full items
+        // Function to auto-add non-half_full items
+    function autoAddNonHalfFullItem(dishName, itemDetails) {
         const selectedService = $('#service-dropdown').val();
-        const selectedDish = $('#next-dropdown').val();
-        const selectedQty = $('input[name="quantity"]:checked').val();
-        const qtyText = selectedQty === 'H' ? 'Half' : 'Full';
         const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
         const Category = $('#TableCategory').val();
-
+        
         if (!selectedService) {
             Swal.fire('Warning', 'Please select a table first.', 'warning');
-            // Reset radio button
-            $('input[name="quantity"]').prop('checked', false);
+            return;
+        }
+        
+        // Check if item already exists
+        if (isDishAlreadyAdded(dishName, 'default', itemDetails.menu_measurement)) {
+            Swal.fire('Info', `${dishName} is already in the order. You can increase quantity using the quantity field.`, 'info');
+            return;
+        }
+        
+        // Prepare data for the item
+        const formData = new FormData();
+        formData.append('service', selectedService);
+        formData.append('Category', Category);
+        formData.append('dish', dishName);
+        formData.append('quantity', 'F'); // Always 'F' for non-half_full items
+        
+        // Add appropriate data based on measurement type
+        switch(itemDetails.menu_measurement) {
+            case 'piece':
+            case 'bottle':
+            case 'glass':
+            case 'slice':
+            case 'plate':
+                formData.append('qty', 1); // Default quantity 1
+                break;
+            case 'ml':
+                // For ml items, check if measurement_unit has a specific size
+                if (itemDetails.measurement_unit && itemDetails.measurement_unit.includes('ml')) {
+                    // Extract the ml value from measurement_unit (e.g., "500ml" -> 500)
+                    const mlMatch = itemDetails.measurement_unit.match(/(\d+)ml/);
+                    if (mlMatch) {
+                        formData.append('ml_qty', mlMatch[1]); // Use the specific size from database
+                    } else {
+                        formData.append('ml_qty', 500); // Default fallback
+                    }
+                } else {
+                    formData.append('ml_qty', 500); // Default fallback
+                }
+                break;
+            default:
+                formData.append('qty', 1);
+        }
+        
+        formData.append('finalOrder', 'finalOrder');
+        formData.append('csrfmiddlewaretoken', csrftoken);
+
+        // Send to server
+        $.ajax({
+            url: "{% url 'orderCreate' %}",
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            headers: {
+                'X-CSRFToken': csrftoken
+            },
+            success: function(response) {
+                if (response.menu_item) {
+                    const item = response.menu_item;
+                    const dish = item.menu_name;
+                    const category = item.menu_category;
+                    const qtyDisplay = item.qty_display || '1 item';
+                    const unitPrice = parseFloat(item.unit_price) || 0;
+                    const totalPrice = parseFloat(item.total_price) || 0;
+                    
+                    console.log('Item added:', item); // Debug log
+                    
+                    // Determine badge class
+                    let badgeClass = 'badge-primary';
+                    
+                    const rowHtml = `
+                        <tr data-unit-price="${unitPrice}" data-measurement="${item.menu_measurement || 'other'}" data-total-price="${totalPrice}">
+                            <td>${dish}</td>
+                            <td><span class="badge badge-info">${category}</span></td>
+                            <td><span class="badge ${badgeClass}">${qtyDisplay}</span></td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm dynamic-qty" 
+                                    min="1" value="1" style="width: 70px;">
+                            </td>
+                            <td class="price-cell font-weight-bold">₹${totalPrice.toFixed(2)}</td>
+                            <td>
+                                <button type="button" class="btn btn-danger btn-sm delete-row">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+
+                    $('#order-summary tbody').append(rowHtml);
+                    updateBillSummary();
+                    
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Item Added!',
+                        text: `${dish} added to order`,
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                } else if (response.error) {
+                    Swal.fire('Error', response.error, 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Order submission error:', error);
+                Swal.fire('Error', 'Item not found or not available', 'error');
+            }
+        });
+    }
+
+    // Event handler for radio buttons (half/full items only)
+    $(document).on('change', 'input[name="quantity"]', function () {
+        // Only trigger for half/full items
+        if (currentMeasurementType === 'half_full') {
+            addHalfFullItemToOrder();
+        }
+    });
+
+    // Also handle click on radio labels
+    $(document).on('click', '.custom-radio', function() {
+        const radio = $(this).find('input[name="quantity"]');
+        if (!radio.is(':checked')) {
+            radio.prop('checked', true).trigger('change');
+        }
+    });
+
+    // Function to add half/full item to order
+    function addHalfFullItemToOrder() {
+        const selectedService = $('#service-dropdown').val();
+        const selectedDish = $('#next-dropdown').val();
+        const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        const Category = $('#TableCategory').val();
+        
+        let selectedQty = $('input[name="quantity"]:checked').val();
+        
+        if (!selectedQty) {
+            Swal.fire('Warning', 'Please select portion size (Half/Full).', 'warning');
+            return;
+        }
+        
+        const qtyText = selectedQty === 'H' ? 'Half' : 'Full';
+        
+        if (!selectedService) {
+            Swal.fire('Warning', 'Please select a table first.', 'warning');
             return;
         }
 
         if (!selectedDish) {
             Swal.fire('Warning', 'Please select a dish first.', 'warning');
-            // Reset radio button
-            $('input[name="quantity"]').prop('checked', false);
             return;
         }
 
-        if (!selectedQty) {
-            Swal.fire('Warning', 'Please select portion size (Half/Full).', 'warning');
-            return;
-        }
-
-        // Check if dish with same portion already exists
-        if (isDishAlreadyAdded(selectedDish, qtyText)) {
-            Swal.fire({
-                title: 'Duplicate Item',
-                text: `${selectedDish} (${qtyText}) is already in the order. Would you like to increase quantity instead?`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33',
-                confirmButtonText: 'Yes, Increase Quantity',
-                cancelButtonText: 'No, Cancel'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    // Find the existing row and increase quantity
-                    $('#order-summary tbody tr').each(function () {
-                        const existingDish = $(this).find('td:eq(0)').text();
-                        const existingPortion = $(this).find('td:eq(2)').text().trim();
-                        
-                        if (existingDish === selectedDish && existingPortion === qtyText) {
-                            const qtyInput = $(this).find('.dynamic-qty');
-                            const currentQty = parseInt(qtyInput.val()) || 1;
-                            qtyInput.val(currentQty + 1);
-                            
-                            // Trigger change to update bill
-                            qtyInput.trigger('input');
-                            
-                            Swal.fire('Quantity Updated', `Increased ${selectedDish} (${qtyText}) quantity to ${currentQty + 1}`, 'success');
-                            return false; // Break out of loop
-                        }
-                    });
-                }
-                
-                // Reset inputs for both cases
-                $('#next-dropdown').val('');
-                $('input[name="quantity"]').prop('checked', false);
-            });
+        // Check if dish already exists
+        let existingRow = null;
+        let existingQtyValue = 0;
+        
+        $('#order-summary tbody tr').each(function () {
+            const existingDish = $(this).find('td:eq(0)').text();
+            const existingPortion = $(this).find('td:eq(2)').text().trim();
             
-            return; // CRITICAL: Return here to prevent AJAX call
+            // For half/full, check exact dish + portion
+            if (existingDish === selectedDish && existingPortion === qtyText) {
+                existingRow = $(this);
+                existingQtyValue = parseInt($(this).find('.dynamic-qty').val()) || 1;
+                return false; // Break loop
+            }
+        });
+        
+        // If item already exists, increase quantity
+        if (existingRow) {
+            const newQty = existingQtyValue + 1;
+            existingRow.find('.dynamic-qty').val(newQty);
+            
+            // Update price
+            const unitPrice = parseFloat(existingRow.data('unit-price'));
+            const updatedTotal = (unitPrice * newQty).toFixed(2);
+            existingRow.find('.price-cell').text(`₹${updatedTotal}`);
+            
+            // Update bill
+            updateBillSummary();
+            
+            // Show success message
+            Swal.fire('Quantity Updated', `Increased ${selectedDish} (${qtyText}) quantity to ${newQty}`, 'success');
+            
+            // Reset form for next entry
+            $('#next-dropdown').val('');
+            $('input[name="quantity"]').prop('checked', false);
+            return; // Don't proceed with AJAX call
         }
 
-        // If not duplicate, proceed with AJAX call
         const formData = new FormData();
         formData.append('service', selectedService);
         formData.append('Category', Category);
@@ -444,22 +808,23 @@
                     const item = response.menu_item;
                     const dish = item.menu_name;
                     const category = item.menu_category;
-                    const portionSize = selectedQty;
-                    const unitPrice = portionSize === 'H' ? parseFloat(item.menu_half_price) : parseFloat(item.menu_full_price);
-                    const quantityText = portionSize === 'H' ? 'Half' : 'Full';
-                    const badgeClass = portionSize === 'H' ? 'badge-warning' : 'badge-success';
-                    const totalPrice = (unitPrice * 1).toFixed(2);
-
+                    const qtyDisplay = item.qty_display || (item.selected_qty === 'H' ? 'Half' : 'Full');
+                    const unitPrice = parseFloat(item.unit_price) || 0;
+                    const totalPrice = parseFloat(item.total_price) || 0;
+                    
+                    // Determine badge class
+                    let badgeClass = item.selected_qty === 'H' ? 'badge-warning' : 'badge-success';
+                    
                     const rowHtml = `
-                        <tr data-unit-price="${unitPrice}">
+                        <tr data-unit-price="${unitPrice}" data-measurement="${item.menu_measurement || 'half_full'}" data-total-price="${totalPrice}">
                             <td>${dish}</td>
                             <td><span class="badge badge-info">${category}</span></td>
-                            <td><span class="badge ${badgeClass}">${quantityText}</span></td>
+                            <td><span class="badge ${badgeClass}">${qtyDisplay}</span></td>
                             <td>
                                 <input type="number" class="form-control form-control-sm dynamic-qty" 
                                     min="1" value="1" style="width: 70px;">
                             </td>
-                            <td class="price-cell font-weight-bold">₹${totalPrice}</td>
+                            <td class="price-cell font-weight-bold">₹${totalPrice.toFixed(2)}</td>
                             <td>
                                 <button type="button" class="btn btn-danger btn-sm delete-row">
                                     <i class="fas fa-trash"></i>
@@ -471,22 +836,27 @@
                     $('#order-summary tbody').append(rowHtml);
                     updateBillSummary();
                     
-                    // Reset fields for next entry
+                    // Reset form for next entry
                     $('#next-dropdown').val('');
                     $('input[name="quantity"]').prop('checked', false);
                     
-                    // REMOVED: No success message for normal addition
-                    // Item will just appear in the table silently
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Item Added!',
+                        text: `${dish} (${qtyDisplay}) added to order`,
+                        timer: 1500,
+                        showConfirmButton: false
+                    });
+                } else if (response.error) {
+                    Swal.fire('Error', response.error, 'error');
                 }
             },
             error: function(xhr, status, error) {
                 console.error('Order submission error:', error);
                 Swal.fire('Error', 'Item not found or not available', 'error');
-                // Reset radio button on error too
-                $('input[name="quantity"]').prop('checked', false);
             }
         });
-    });
+    }
 
     // Quantity change updates
     $(document).on('input', '.dynamic-qty', function () {
@@ -499,14 +869,81 @@
         }
 
         const row = $(this).closest('tr');
-        const unitPrice = parseFloat(row.data('unit-price'));
-        const updatedTotal = (unitPrice * qty).toFixed(2);
-        row.find('.price-cell').text(`₹${updatedTotal}`);
-        updateBillSummary();
-    });
+        const dish = row.find('td:eq(0)').text();
+        const category = row.find('td:eq(1) .badge').text();
+        const measurementType = row.data('measurement') || 'half_full';
+        const selectedService = $('#service-dropdown').val();
+        const Category = $('#TableCategory').val();
+        const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
-    // GST checkbox toggle
-    $('#gst-checkbox').on('change', updateBillSummary);
+        // Prepare data for backend
+        const formData = new FormData();
+        formData.append('service', selectedService);
+        formData.append('Category', Category);
+        formData.append('dish', dish);
+        formData.append('quantity', 'F'); // Default to 'F' for quantity-based items
+        
+        // For piece/bottle/glass/slice/plate items
+        if (measurementType === 'piece' || measurementType === 'bottle' || 
+            measurementType === 'glass' || measurementType === 'slice' || 
+            measurementType === 'plate') {
+            formData.append('qty', qty);
+        }
+        // For ml items - get the ml_qty from the portion text
+        else if (measurementType === 'ml') {
+            const portionText = row.find('td:eq(2) .badge').text();
+            const mlMatch = portionText.match(/(\d+)ml/);
+            if (mlMatch) {
+                formData.append('ml_qty', mlMatch[1]);
+                formData.append('qty', qty);
+            }
+        }
+        // For half/full items
+        else if (measurementType === 'half_full') {
+            const portionText = row.find('td:eq(2) .badge').text();
+            const selectedQty = portionText === 'Half' ? 'H' : 'F';
+            formData.append('quantity', selectedQty);
+            formData.append('qty', qty);
+        }
+        
+        formData.append('finalOrder', 'finalOrder');
+        formData.append('csrfmiddlewaretoken', csrftoken);
+
+        // Call backend to get updated price
+        $.ajax({
+            url: "{% url 'orderCreate' %}",
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            headers: {
+                'X-CSRFToken': csrftoken
+            },
+            success: function(response) {
+                if (response.menu_item) {
+                    const item = response.menu_item;
+                    const totalPrice = parseFloat(item.total_price) || 0;
+                    
+                    // Update the row with new price
+                    row.find('.price-cell').text(`₹${totalPrice.toFixed(2)}`);
+                    row.data('unit-price', parseFloat(item.unit_price) || 0);
+                    row.data('total-price', totalPrice);
+                    
+                    // Update portion text for quantity-based items
+                    if (measurementType !== 'half_full') {
+                        row.find('td:eq(2) .badge').text(item.qty_display || `${qty} item`);
+                    }
+                    
+                    // Update bill summary
+                    updateBillSummary();
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Price update error:', error);
+                Swal.fire('Error', 'Failed to update price', 'error');
+            }
+        });
+    });
 
     // Delete row with confirmation
     $(document).on('click', '.delete-row', function () {
@@ -545,13 +982,15 @@
             const quantity = $(this).find('td:eq(3) input').val();
             const priceText = $(this).find('td:eq(4)').text().replace('₹', '');
             const price = parseFloat(priceText);
+            const measurementType = $(this).data('measurement') || 'half_full';
 
             orderItems.push({
                 menu_name: dish,
                 menu_category: category,
-                quantity_type: quantity_type === 'Half' ? 'H' : 'F',
+                quantity_type: measurementType === 'half_full' ? (quantity_type === 'Half' ? 'H' : 'F') : 'F',
                 quantity: quantity,
                 price: price,
+                measurement_type: measurementType
             });
         });
 
@@ -569,9 +1008,9 @@
         const formData = new FormData();
         formData.append('table_no', selectedService);
         formData.append('order_items', JSON.stringify(orderItems));
-        formData.append('total_amount', billData.total);
-        formData.append('gst_applied', $('#gst-checkbox').is(':checked') ? 1 : 0);
-        formData.append('gst_amount', billData.gstAmount);
+        formData.append('total_amount', billData.subtotal);
+        formData.append('gst_applied', $('#apply-gst-checkbox').is(':checked') ? 1 : 0);
+        formData.append('gst_amount', billData.totalGst);
         formData.append('grand_total', billData.grandTotal);
         formData.append('csrfmiddlewaretoken', csrftoken);
         formData.append('TableCategory', TableCategory);
@@ -608,79 +1047,58 @@
 
     // Print Bill Function
     $('#save-print-btn').on('click', function() {
-        const printWindow = window.open('', '_blank');
         const billData = updateBillSummary();
+        const printWindow = window.open('', '_blank');
+        
+        // Build tax details for print
+        let taxDetails = '';
+        if (billData.foodGst > 0) {
+            taxDetails += `<p>Food GST @${billData.foodGstRate}%: ₹${billData.foodGst.toFixed(2)}</p>`;
+        }
+        if (billData.drinkGst > 0) {
+            taxDetails += `<p>Drink GST @${billData.drinkGstRate}%: ₹${billData.drinkGst.toFixed(2)}</p>`;
+        }
+        if (billData.serviceCharge > 0) {
+            taxDetails += `<p>Service Charge: ₹${billData.serviceCharge.toFixed(2)}</p>`;
+        }
         
         printWindow.document.write(`
             <html>
-                <head>
-                    <title>Bill - New Order</title>
-                    <style>
-                        body { font-family: 'Courier New', monospace; padding: 15px; }
-                        .text-center { text-align: center; }
-                        .text-right { text-align: right; }
-                        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-                        th, td { padding: 5px; border-bottom: 1px dashed #ccc; }
-                        .total-row { border-top: 2px solid #000; padding-top: 10px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="text-center">
-                        <h3>Restaurant Name</h3>
-                        <p>Your Restaurant Address<br>Phone: 123-456-7890</p>
-                        <hr>
-                    </div>
-                    
-                    <p><strong>Bill No:</strong> New Order</p>
-                    <p><strong>Table:</strong> ${$('#service-dropdown').val()} ${$('#TableCategory').val() ? '(' + $('#TableCategory').val() + ')' : ''}</p>
+                <head><title>Bill</title></head>
+                <body style="font-family: monospace; padding: 15px;">
+                    <h3 style="text-align: center;">PRU AF RESTAURANT</h3>
+                    <hr>
+                    <p><strong>Table:</strong> ${$('#service-dropdown').val()}</p>
                     <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+                    <hr>
                     
-                    <table>
-                        <thead>
+                    <table width="100%">
+                        ${billData.items.map(item => `
                             <tr>
-                                <th>Item</th>
-                                <th class="text-center">Type</th>
-                                <th class="text-center">Qty</th>
-                                <th class="text-right">Amount</th>
+                                <td>${item.name}</td>
+                                <td align="right">₹${item.total.toFixed(2)}</td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            ${billData.items.map(item => `
-                                <tr>
-                                    <td>${item.name}</td>
-                                    <td class="text-center">${item.type}</td>
-                                    <td class="text-center">${item.qty}</td>
-                                    <td class="text-right">₹${item.total.toFixed(2)}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
+                        `).join('')}
                     </table>
                     
-                    <div class="total-row">
-                        <p>Subtotal: ₹${billData.total.toFixed(2)}</p>
-                        <p>GST (18%): ₹${billData.gstAmount.toFixed(2)}</p>
-                        <h3>Grand Total: ₹${billData.grandTotal.toFixed(2)}</h3>
-                    </div>
-                    
-                    <div class="text-center" style="margin-top: 30px;">
-                        <p>Thank you for dining with us!</p>
-                        <p>** GST included in the bill **</p>
-                    </div>
+                    <hr>
+                    <p>Subtotal: ₹${billData.subtotal.toFixed(2)}</p>
+                    ${taxDetails}
+                    <h3>Grand Total: ₹${billData.grandTotal.toFixed(2)}</h3>
+                    <hr>
+                    <p style="text-align: center;">Thank You!</p>
                 </body>
             </html>
         `);
         
         printWindow.document.close();
         printWindow.focus();
-        setTimeout(() => {
-            printWindow.print();
-            printWindow.close();
-        }, 500);
+        printWindow.print();
+        printWindow.close();
     });
 
     // Go Back button
     $('#go-back-btn').on('click', function() {
-        // Optional: Ask for confirmation if there are unsaved changes
         if ($('#order-summary tbody tr').length > 0) {
             Swal.fire({
                 title: 'Leave this page?',
@@ -700,6 +1118,26 @@
             window.location.href = "{% url 'orderDetailIndex' %}";
         }
     });
+
+    // GST checkbox toggle
+    $('#apply-gst-checkbox').on('change', function() {
+        updateBillSummary();
+        
+        const isChecked = $(this).is(':checked');
+        const message = isChecked ? 
+            'GST and service charges will be applied to the bill.' :
+            'GST and service charges will NOT be applied to the bill.';
+        
+        Swal.fire({
+            title: isChecked ? 'GST Enabled' : 'GST Disabled',
+            text: message,
+            icon: isChecked ? 'info' : 'warning',
+            timer: 1500,
+            showConfirmButton: false
+        });
+    });
+
 </script>
+
 
 {% endblock %}
