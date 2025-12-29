@@ -457,18 +457,22 @@ def editOrderCreate(request):
             seating_category=Category
         ).values_list('menu_name', flat=True)
 
+        # Get tax rates - IMPORTANT
+        tax_rates = get_tax_rates()
+
         return render(request, 'OrderFood/editOrderCreate.html', {
             "tableName": tableName,
             "Category": Category,
             "menu_items": menu_items,
             "selected_order": order,
-            "order_details": order_details
+            "order_details": order_details,
+            "tax_rates": tax_rates  # ADD THIS LINE
         })
 
     except Exception as e:
         print("Edit Order Error:", e)
         return render(request, 'Shared/404.html', status=404)
-
+    
 @login_required
 @transaction.atomic
 def orderUpdateDetails(request):
@@ -476,38 +480,83 @@ def orderUpdateDetails(request):
         try:
             order_id = decrypt_parameter(request.POST.get('order_id'))
             order_items = json.loads(request.POST.get('order_items'))
-
+            
+            print(f"=== DEBUG: Updating Order {order_id} ===")
+            
+            # Get values FROM FRONTEND (they're already calculated correctly)
+            subtotal_from_frontend = Decimal(str(request.POST.get('total_amount', '0.00')))
+            gst_amount_from_frontend = Decimal(str(request.POST.get('gst_amount', '0.00')))
+            grand_total_from_frontend = Decimal(str(request.POST.get('grand_total', '0.00')))
+            gst_applied_param = request.POST.get('gst_applied', '1')
+            gst_applied = 1 if gst_applied_param == '1' else 0
+            
+            print(f"DEBUG: Values from frontend:")
+            print(f"  Subtotal: {subtotal_from_frontend}")
+            print(f"  GST Amount: {gst_amount_from_frontend}")
+            print(f"  Grand Total: {grand_total_from_frontend}")
+            print(f"  GST Applied: {gst_applied}")
+            
             order = Order.objects.get(order_id=order_id)
+            current_time = timezone.now()
 
             # Delete existing items
             OrderDetail.objects.filter(order=order).delete()
 
-            # Insert updated items
+            # Store items as they come from frontend
+            # Frontend should send UNIT price, backend stores UNIT price
+            print(f"\nDEBUG: Storing {len(order_items)} items")
             for item in order_items:
+                unit_price = Decimal(str(item['price']))
+                quantity = int(item['quantity'])
+                
+                print(f"  {item['menu_name']}: unit_price={unit_price}, quantity={quantity}")
+                
                 OrderDetail.objects.create(
                     order=order,
                     menu_name=item['menu_name'],
                     menu_category=item['menu_category'],
                     quantity_type=item['quantity_type'],
-                    quantity=int(item['quantity']),
-                    price=float(item['price']),
-                    created_by=request.user
+                    quantity=quantity,
+                    price=unit_price,  # Store UNIT price
+                    created_by=request.user,
+                    updated_at=current_time,
+                    updated_by=request.user,
+                    status_id=1
                 )
 
-            # Update order totals
-            order.total_amount = request.POST.get('total_amount')
-            order.gst_applied = request.POST.get('gst_applied')
-            order.gst_amount = request.POST.get('gst_amount')
-            order.grand_total = request.POST.get('grand_total')
+            # USE VALUES FROM FRONTEND - don't recalculate!
+            order.total_amount = subtotal_from_frontend
+            order.gst_applied = gst_applied
+            order.gst_amount = gst_amount_from_frontend
+            order.grand_total = grand_total_from_frontend
             order.updated_by = request.user
-            order.updated_at = timezone.now()
+            order.updated_at = current_time
             order.save()
 
-            return JsonResponse({"status": "success"})
+            print(f"\n=== DEBUG: Update Complete ===")
+            print(f"Stored in Order table:")
+            print(f"  total_amount: {subtotal_from_frontend}")
+            print(f"  gst_amount: {gst_amount_from_frontend}")
+            print(f"  grand_total: {grand_total_from_frontend}")
+
+            return JsonResponse({
+                "status": "success",
+                "message": "Order updated successfully",
+                "data": {
+                    "subtotal": float(subtotal_from_frontend),
+                    "gst_amount": float(gst_amount_from_frontend),
+                    "grand_total": float(grand_total_from_frontend)
+                }
+            })
 
         except Exception as e:
             print("Update Order Error:", e)
-            return JsonResponse({"status": "error"}, status=500)
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({
+                "status": "error",
+                "message": str(e)
+            }, status=500)
 
 @login_required
 def get_menu_price(request):
@@ -543,6 +592,7 @@ from decimal import Decimal
 import json
 
 @csrf_exempt
+@login_required
 def delete_order_item(request):
     if request.method == "POST":
         enc_id = request.POST.get('order_detail_id')
@@ -551,24 +601,60 @@ def delete_order_item(request):
         try:
             item = OrderDetail.objects.get(id=order_detail_id)
             order = item.order
-
+            
+            print(f"DEBUG: Deleting {item.menu_name}")
+            
             # Delete item
             item.delete()
 
-            # Recalculate totals
+            # Recalculate simple total from remaining items
             items = OrderDetail.objects.filter(order=order)
-
-            total = sum(i.price * i.quantity for i in items)
-            gst = total * Decimal('0.18') if order.gst_applied else Decimal('0.00')
-
-            order.total_amount = total
-            order.gst_amount = gst
-            order.grand_total = total + gst
+            
+            # Simple calculation: sum of (unit_price × quantity)
+            subtotal = Decimal('0.00')
+            for i in items:
+                item_total = i.price * Decimal(str(i.quantity))
+                subtotal += item_total
+            
+            print(f"DEBUG: New subtotal after deletion: {subtotal}")
+            
+            # Simple GST calculation (5% for now - or use stored rate)
+            # If you want to be precise, get rates from database
+            tax_rates = get_tax_rates()
+            gst_rate = Decimal(str(tax_rates.get('food_gst', 5)))  # Use food rate as default
+            
+            gst_amount = (subtotal * gst_rate) / Decimal('100')
+            grand_total = subtotal + gst_amount
+            
+            # Update order
+            order.total_amount = subtotal
+            order.gst_amount = gst_amount
+            order.grand_total = grand_total
             order.save()
 
-            return JsonResponse({'status': 'success'})
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Item deleted successfully',
+                'data': {
+                    'subtotal': float(subtotal),
+                    'gst_amount': float(gst_amount),
+                    'grand_total': float(grand_total)
+                }
+            })
 
         except OrderDetail.DoesNotExist:
-            return JsonResponse({'status': 'error', 'message': 'Item not found'})
+            return JsonResponse({
+                'status': 'error', 
+                'message': 'Item not found'
+            }, status=404)
+        except Exception as e:
+            print("Delete item error:", e)
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
 
-    return JsonResponse({'status': 'invalid'})
+    return JsonResponse({
+        'status': 'error',
+        'message': 'Invalid request method'
+    }, status=400)
